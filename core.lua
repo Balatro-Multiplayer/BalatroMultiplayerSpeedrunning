@@ -94,6 +94,9 @@ MPAPI.on_loaded(function()
 	end)
 
 	SPDRN.load_spdrn_dir('objects', true)
+	if next(SMODS.find_mod('Integration')) then
+		SPDRN.load_spdrn_file('tests/main.lua')
+	end
 end)
 
 SPDRN.is_active = function()

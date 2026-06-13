@@ -1,6 +1,5 @@
 MPAPI.ActionType({
 	key = 'spdrn_start_game',
-	mod = SPDRN,
 	on_receive = function(action_type, from_player_id, params)
 		local lobby = MPAPI.get_current_lobby()
 		if not lobby then

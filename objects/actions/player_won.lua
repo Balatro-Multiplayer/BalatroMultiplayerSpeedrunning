@@ -1,6 +1,5 @@
 MPAPI.ActionType({
 	key = 'spdrn_player_won',
-	mod = SPDRN,
 	on_receive = function(action_type, from_player_id, params)
 		local lobby = MPAPI.get_current_lobby()
 		if not lobby then
@@ -23,5 +22,9 @@ MPAPI.ActionType({
 				return true
 			end,
 		}))
+
+		if lobby.is_host then
+			SPDRN.report_match_result(winner_id)
+		end
 	end,
 })

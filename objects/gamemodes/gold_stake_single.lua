@@ -1,6 +1,5 @@
 MPAPI.GameMode({
 	key = 'spdrn_gold_stake_single',
-	mod = SPDRN,
 	display_name = 'Gold Stake Single',
 	has_ranked_mode = true,
 	max_players = {
@@ -13,7 +12,7 @@ MPAPI.GameMode({
 		self._forfeited = {}
 	end,
 	on_ante_change = function(self, ante)
-		if ante < 2 then
+		if ante < 9 then
 			self._win_fired = false
 			return
 		end

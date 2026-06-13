@@ -1,6 +1,5 @@
 MPAPI.GameMode({
 	key = 'spdrn_white_stake_triple',
-	mod = SPDRN,
 	display_name = 'White Stake Triple',
 	has_ranked_mode = true,
 	max_players = {
@@ -14,7 +13,7 @@ MPAPI.GameMode({
 		self._forfeited = {}
 	end,
 	on_ante_change = function(self, ante)
-		if ante < 2 then
+		if ante < 9 then
 			self._ante9_fired = false
 			return
 		end

@@ -268,7 +268,7 @@ G.FUNCS.spdrn_change_gold_stake_single = function()
 	change_gamemode('spdrn_gold_stake_single')
 end
 
-local function generate_seed()
+SPDRN.generate_seed = function()
 	local chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'
 	local seed = ''
 	for i = 1, 8 do
@@ -283,7 +283,7 @@ G.FUNCS.spdrn_start_game = function()
 		return
 	end
 	local action = _current_lobby_ref:action(MPAPI.ActionTypes['spdrn_start_game'])
-	action:broadcast({ seed = generate_seed() })
+	action:broadcast({ seed = SPDRN.generate_seed() })
 end
 
 G.FUNCS.spdrn_leave_lobby = function()
