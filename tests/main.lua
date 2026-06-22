@@ -1,0 +1,7 @@
+SPDRN.load_spdrn_file('tests/seed.lua')
+SPDRN.load_spdrn_file('tests/gamemodes.lua')
+SPDRN.load_spdrn_file('tests/actions.lua')
+SPDRN.load_spdrn_file('tests/ban_pick.lua')
+SPDRN.load_spdrn_file('tests/matchmaking.lua')
+SPDRN.load_spdrn_file('tests/runs.lua')
+SPDRN.load_spdrn_file('tests/order.lua')
