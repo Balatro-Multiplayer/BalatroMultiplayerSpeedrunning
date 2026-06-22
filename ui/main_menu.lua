@@ -7,6 +7,10 @@ local create_buttons
 
 local _pending_gamemode_key = nil
 
+-- Distinct teal for the Leaderboard button: unused by any other menu button
+-- (Blue/Green/Red/Purple/Orange) yet sits within Balatro's bright UI palette.
+local _leaderboard_colour = { 0.20, 0.74, 0.72, 1 }
+
 local _find_game_button
 local _find_game_args
 local _create_lobby_button
@@ -40,8 +44,10 @@ SPDRN.build_pre_lobby_ui = function()
 								n = G.UIT.C,
 								config = { align = 'cm' },
 								nodes = {
-									{ n = G.UIT.R, config = { align = 'cm' }, nodes = { _practice_button.node } },
-									{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = { _leaderboard_button.node } },
+									{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
+										{ n = G.UIT.C, config = { align = 'cm', padding = 0.05 }, nodes = { _leaderboard_button.node } },
+										{ n = G.UIT.C, config = { align = 'cm', padding = 0.05 }, nodes = { _practice_button.node } },
+									} },
 								},
 							},
 							{
@@ -133,11 +139,12 @@ create_buttons = function()
 		_leaderboard_button = MPAPI.disableable_button({
 			id = 'spdrn_leaderboard',
 			button = 'spdrn_open_leaderboard',
-			colour = G.C.FILTER,
+			colour = _leaderboard_colour,
 			minw = 2.65,
-			minh = 0.6,
+			minh = 1.35,
 			label = { localize('b_leaderboard_cap') },
-			scale = 0.45,
+			scale = 0.54,
+			col = true,
 			enabled = function()
 				return MPAPI.is_connected()
 			end,
@@ -163,6 +170,19 @@ end
 
 G.FUNCS.spdrn_gm_shadows = function(e)
 	e.shadow_parrallax = { x = 0, y = -1.5 * e.config.minh ^ 0.25 }
+end
+
+G.FUNCS.spdrn_gm_disabled = function() end
+
+-- A greyed, non-interactive placeholder for gamemodes that aren't implemented yet
+-- (shown only in the Create-Lobby grid). Takes the SAME args as the original
+-- UIBox_button so sizing/layout is unchanged; it's just greyed and unclickable.
+local function disabled_gm_button(args)
+	local a = MPAPI.shallow_copy(args)
+	a.enabled = false
+	a.button = 'spdrn_gm_disabled'
+	a.colour = G.C.UI.BACKGROUND_INACTIVE
+	return MPAPI.disableable_button(a).node
 end
 
 G.FUNCS.spdrn_create_lobby = function()
@@ -204,11 +224,9 @@ G.FUNCS.spdrn_create_lobby = function()
 											n = G.UIT.C,
 											config = { align = 'cm', padding = 0.05 },
 											nodes = {
-												UIBox_button({
+												disabled_gm_button({
 													id = 'spdrn_gm_gold_triple',
-													button = 'spdrn_select_gold_stake_single',
 													label = { 'Seed', 'Scout' },
-													colour = G.C.BLUE,
 													minw = 1,
 													minh = 2.1,
 													scale = 0.5,
@@ -224,7 +242,7 @@ G.FUNCS.spdrn_create_lobby = function()
 													n = G.UIT.R,
 													config = { align = 'cm', padding = 0.05 },
 													nodes = {
-														UIBox_button({ id = 'spdrn_gm_challenge', button = 'spdrn_select_challenge', label = { 'Challenge' }, colour = G.C.RED, minw = 2.1, minh = 1, scale = 0.5, func = 'spdrn_gm_shadows' }),
+														disabled_gm_button({ id = 'spdrn_gm_challenge', label = { 'Challenge' }, minw = 2.1, minh = 1, scale = 0.5, func = 'spdrn_gm_shadows' }),
 													},
 												},
 												{
@@ -235,11 +253,9 @@ G.FUNCS.spdrn_create_lobby = function()
 															n = G.UIT.C,
 															config = { align = 'cm', padding = 0.05 },
 															nodes = {
-																UIBox_button({
+																disabled_gm_button({
 																	id = 'spdrn_gm_all_deck',
-																	button = 'spdrn_select_all_deck',
 																	label = { 'All', 'Deck' },
-																	colour = G.C.PURPLE,
 																	minw = 1,
 																	minh = 1,
 																	scale = 0.5,
@@ -251,11 +267,9 @@ G.FUNCS.spdrn_create_lobby = function()
 															n = G.UIT.C,
 															config = { align = 'cm', padding = 0.05 },
 															nodes = {
-																UIBox_button({
+																disabled_gm_button({
 																	id = 'spdrn_gm_stake_climb',
-																	button = 'spdrn_select_stake_climb',
 																	label = { 'Stake', 'Climb' },
-																	colour = G.C.GREEN,
 																	minw = 1,
 																	minh = 1,
 																	scale = 0.5,
@@ -287,12 +301,14 @@ end
 
 local function create_lobby_with_gamemode(key)
 	_pending_gamemode_key = key
+	SPDRN._lobby_kind = 'private'
 	G.FUNCS.exit_overlay_menu()
 
 	local gm = MPAPI.GameModes[key]
 	local lobby = MPAPI.create_lobby(SPDRN.id, { max_players = gm and gm:get_max_players('private') or 16 })
 	if not lobby then
 		_pending_gamemode_key = nil
+		SPDRN._lobby_kind = nil
 		return
 	end
 
@@ -303,9 +319,37 @@ local function create_lobby_with_gamemode(key)
 		love.system.setClipboardText(lobby.code)
 		SPDRN.sendDebugMessage('Code copied to clipboard')
 		if _pending_gamemode_key then
-			lobby:set_metadata({ gamemode = _pending_gamemode_key, deck = 'Blue Deck' })
+			lobby:set_metadata({ gamemode = _pending_gamemode_key, deck = 'Blue Deck', ruleset = 'spdrn_order', kind = 'private' })
 			_pending_gamemode_key = nil
 		end
+	end)
+end
+
+-- Practice: a client-only (offline) lobby that drops the player straight into a
+-- run with no lobby view (suppress_lobby_view) and no countdown. It never
+-- allocates a server lobby, so there is nothing to be orphaned if the run is
+-- abandoned without using the end-screen buttons.
+function SPDRN._start_practice(gamemode_key, decks)
+	SPDRN._lobby_kind = 'practice'
+	-- `decks` is the picker's ordered list (one deck per run for multi-deck modes); fall
+	-- back to a single default if nothing came through.
+	local deck_list = type(decks) == 'table' and decks or { decks }
+	if #deck_list == 0 then
+		deck_list = { 'Blue Deck' }
+	end
+
+	local lobby = MPAPI.create_local_lobby(SPDRN.id, { max_players = 1 })
+	if not lobby then
+		SPDRN._lobby_kind = nil
+		return
+	end
+	lobby.suppress_lobby_view = true
+
+	SPDRN.setup_lobby_events(lobby)
+
+	lobby:on('connected', function()
+		lobby:set_metadata({ gamemode = gamemode_key, deck = SPDRN.meta_deck_value(deck_list), ruleset = 'spdrn_order', kind = 'practice' })
+		SPDRN.begin_run(gamemode_key, deck_list, SPDRN.generate_seed())
 	end)
 end
 
@@ -375,8 +419,11 @@ G.FUNCS.spdrn_join_lobby_from_clipboard = function()
 end
 
 SPDRN._join_lobby_with_code = function(code)
+	-- Joining by code is always a private lobby.
+	SPDRN._lobby_kind = 'private'
 	local lobby = MPAPI.join_lobby(SPDRN.id, code)
 	if not lobby then
+		SPDRN._lobby_kind = nil
 		return
 	end
 
@@ -392,47 +439,43 @@ SPDRN._join_lobby_with_code = function(code)
 	end)
 end
 
+-- One matchmaking section (Ranked or Casual): the two gamemode buttons stacked,
+-- with the section label on a readable horizontal row beneath them.
+local function queue_section(label, white_btn, gold_btn)
+	return {
+		n = G.UIT.C,
+		config = { align = 'cm', padding = 0.1, r = 0.2, colour = G.C.BLACK },
+		nodes = {
+			{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
+				UIBox_button({ button = white_btn, label = { 'White Stake', 'Triple' }, colour = G.C.ETERNAL, minw = 2.5, minh = 1.0, scale = 0.4, col = true }),
+			} },
+			{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
+				UIBox_button({ button = gold_btn, label = { 'Gold Stake', 'Single' }, colour = G.C.GOLD, minw = 2.5, minh = 1.0, scale = 0.4, col = true }),
+			} },
+			{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
+				{ n = G.UIT.T, config = { text = label, scale = 0.5, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+			} },
+		},
+	}
+end
+
 G.FUNCS.spdrn_find_game = function()
 	G.FUNCS.overlay_menu({
 		definition = create_UIBox_generic_options({
 			contents = {
 				{ n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
-					{ n = G.UIT.T, config = { text = 'Select Ranked Gamemode', scale = 0.5, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+					{ n = G.UIT.T, config = { text = 'Find Game', scale = 0.6, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
 				} },
 				{
 					n = G.UIT.R,
 					config = { align = 'cm', padding = 0.1 },
 					nodes = {
-						{
-							n = G.UIT.C,
-							config = { align = 'cm', padding = 0.08 },
-							nodes = {
-								UIBox_button({
-									button = 'spdrn_queue_gold_stake_single',
-									label = { 'Gold Stake', 'Single' },
-									colour = G.C.GOLD,
-									minw = 2.5,
-									minh = 2.0,
-									scale = 0.5,
-									col = true,
-								}),
-							},
-						},
-						{
-							n = G.UIT.C,
-							config = { align = 'cm', padding = 0.08 },
-							nodes = {
-								UIBox_button({
-									button = 'spdrn_queue_white_stake_triple',
-									label = { 'White Stake', 'Triple' },
-									colour = G.C.ETERNAL,
-									minw = 2.5,
-									minh = 2.0,
-									scale = 0.5,
-									col = true,
-								}),
-							},
-						},
+						{ n = G.UIT.C, config = { align = 'cm', padding = 0.1 }, nodes = {
+							queue_section(localize('k_ranked_cap'), 'spdrn_queue_ranked_white', 'spdrn_queue_ranked_gold'),
+						} },
+						{ n = G.UIT.C, config = { align = 'cm', padding = 0.1 }, nodes = {
+							queue_section(localize('k_casual_cap'), 'spdrn_queue_casual_white', 'spdrn_queue_casual_gold'),
+						} },
 					},
 				},
 			},
@@ -440,14 +483,24 @@ G.FUNCS.spdrn_find_game = function()
 	})
 end
 
-G.FUNCS.spdrn_queue_gold_stake_single = function()
+G.FUNCS.spdrn_queue_ranked_white = function()
 	G.FUNCS.exit_overlay_menu()
-	SPDRN._join_ranked_queue('spdrn_gold_stake_single')
+	SPDRN._join_queue('ranked', 'spdrn_white_stake_triple')
 end
 
-G.FUNCS.spdrn_queue_white_stake_triple = function()
+G.FUNCS.spdrn_queue_ranked_gold = function()
 	G.FUNCS.exit_overlay_menu()
-	SPDRN._join_ranked_queue('spdrn_white_stake_triple')
+	SPDRN._join_queue('ranked', 'spdrn_gold_stake_single')
+end
+
+G.FUNCS.spdrn_queue_casual_white = function()
+	G.FUNCS.exit_overlay_menu()
+	SPDRN._join_queue('casual', 'spdrn_white_stake_triple')
+end
+
+G.FUNCS.spdrn_queue_casual_gold = function()
+	G.FUNCS.exit_overlay_menu()
+	SPDRN._join_queue('casual', 'spdrn_gold_stake_single')
 end
 
 SPDRN._show_searching_state = function(searching)
@@ -455,7 +508,7 @@ SPDRN._show_searching_state = function(searching)
 		return
 	end
 	if searching then
-		_find_game_args.label = { localize('b_searching_cap') }
+		_find_game_args.label = { localize('b_cancel_search_cap') }
 		_find_game_args.button = 'spdrn_cancel_queue'
 		_find_game_args.colour = G.C.RED
 	else
@@ -470,4 +523,42 @@ G.FUNCS.spdrn_cancel_queue = function()
 	SPDRN._cancel_queue()
 end
 
-G.FUNCS.spdrn_practice = function() end
+G.FUNCS.spdrn_practice = function()
+	G.FUNCS.overlay_menu({
+		definition = create_UIBox_generic_options({
+			contents = {
+				{ n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
+					{ n = G.UIT.T, config = { text = 'Practice', scale = 0.6, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+				} },
+				{
+					n = G.UIT.R,
+					config = { align = 'cm', padding = 0.1 },
+					nodes = {
+						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
+							UIBox_button({ button = 'spdrn_practice_white', label = { 'White Stake', 'Triple' }, colour = G.C.ETERNAL, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
+						} },
+						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
+							UIBox_button({ button = 'spdrn_practice_gold', label = { 'Gold Stake', 'Single' }, colour = G.C.GOLD, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
+						} },
+					},
+				},
+			},
+		}),
+	})
+end
+
+G.FUNCS.spdrn_practice_white = function()
+	G.FUNCS.exit_overlay_menu()
+	local count = SPDRN.required_deck_count(MPAPI.GameModes['spdrn_white_stake_triple'])
+	SPDRN.open_deck_select('Blue Deck', function(decks)
+		SPDRN._start_practice('spdrn_white_stake_triple', decks)
+	end, count)
+end
+
+G.FUNCS.spdrn_practice_gold = function()
+	G.FUNCS.exit_overlay_menu()
+	local count = SPDRN.required_deck_count(MPAPI.GameModes['spdrn_gold_stake_single'])
+	SPDRN.open_deck_select('Blue Deck', function(decks)
+		SPDRN._start_practice('spdrn_gold_stake_single', decks)
+	end, count)
+end

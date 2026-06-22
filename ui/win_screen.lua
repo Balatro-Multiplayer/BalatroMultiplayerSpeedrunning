@@ -7,6 +7,15 @@ function SPDRN.create_win_screen()
 	eased_green[4] = 0
 	ease_value(eased_green, 4, 0.5, nil, nil, true)
 
+	local right_col = {
+		create_UIBox_round_scores_row('furthest_ante', G.C.FILTER),
+		create_UIBox_round_scores_row('furthest_round', G.C.FILTER),
+		{ n = G.UIT.R, config = { align = 'cm', minh = 0.2, minw = 0.1 }, nodes = {} },
+	}
+	for _, b in ipairs(SPDRN.end_screen_buttons(true)) do
+		right_col[#right_col + 1] = b
+	end
+
 	local t = create_UIBox_generic_options({
 		padding = 0,
 		bg_colour = eased_green,
@@ -54,23 +63,7 @@ function SPDRN.create_win_screen()
 									{
 										n = G.UIT.C,
 										config = { align = 'tr', padding = 0.08 },
-										nodes = {
-											create_UIBox_round_scores_row('furthest_ante', G.C.FILTER),
-											create_UIBox_round_scores_row('furthest_round', G.C.FILTER),
-											{ n = G.UIT.R, config = { align = 'cm', minh = 0.2, minw = 0.1 }, nodes = {} },
-											UIBox_button({
-												button = 'spdrn_continue_sp',
-												label = { 'Continue in Singleplayer' },
-												colour = G.C.BLUE,
-												minw = 2.5,
-												maxw = 2.5,
-												minh = 0.85,
-												scale = 0.32,
-												focus_args = { nav = 'wide', snap_to = true },
-											}),
-											UIBox_button({ button = 'spdrn_return_to_lobby', label = { 'Return to Lobby' }, colour = G.C.GREEN, minw = 2.5, maxw = 2.5, minh = 0.85, scale = 0.32, focus_args = { nav = 'wide' } }),
-											UIBox_button({ button = 'spdrn_leave_from_game', label = { 'Leave Lobby' }, colour = G.C.RED, minw = 2.5, maxw = 2.5, minh = 0.85, scale = 0.32, focus_args = { nav = 'wide' } }),
-										},
+										nodes = right_col,
 									},
 								},
 							},
@@ -97,28 +90,20 @@ function SPDRN.create_win_screen()
 end
 
 SPDRN.show_win_screen = function()
+	if SPDRN.timer then
+		SPDRN.timer.stop()
+	end
 	play_sound('win')
 	G.SETTINGS.paused = true
+	local ok, def = pcall(SPDRN.create_win_screen)
+	if not ok then
+		SPDRN.sendWarnMessage('create_win_screen error: ' .. tostring(def))
+		return
+	end
 	G.FUNCS.overlay_menu({
-		definition = SPDRN.create_win_screen(),
+		definition = def,
 		config = { no_esc = true },
 	})
 
-	G.E_MANAGER:add_event(Event({
-		trigger = 'after',
-		delay = 2.5,
-		blocking = false,
-		func = function()
-			if G.OVERLAY_MENU and G.OVERLAY_MENU:get_UIE_by_ID('jimbo_spot') then
-				local Jimbo = Card_Character({ x = 0, y = 5 })
-				local spot = G.OVERLAY_MENU:get_UIE_by_ID('jimbo_spot')
-				spot.config.object:remove()
-				spot.config.object = Jimbo
-				Jimbo.ui_object_updated = true
-				Jimbo:add_speech_bubble('wq_' .. math.random(1, 7), nil, { quip = true })
-				Jimbo:say_stuff(5)
-			end
-			return true
-		end,
-	}))
+	MPAPI.animate_jimbo_quip('wq_', 7)
 end

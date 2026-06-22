@@ -93,6 +93,32 @@ MPAPI.on_loaded(function()
 		SPDRN.update_main_menu_buttons()
 	end)
 
+	-- Suppress Balatro's native "You Win" overlay during a speedrun run. Beating the
+	-- win-ante boss fires the global win_game() (its own overlay + vanilla unlocks);
+	-- the gamemode instead drives its own win via SPDRN.show_win_screen, so without
+	-- this the native screen shows over (or instead of) ours.
+	if not SPDRN._win_game_hooked and type(win_game) == 'function' then
+		SPDRN._win_game_hooked = true
+		local _orig_win_game = win_game
+		function win_game(...)
+			if MPAPI.is_active(SPDRN.id) and MPAPI.get_current_lobby() then
+				return
+			end
+			return _orig_win_game(...)
+		end
+	end
+
+	-- Balatro has no single "you lost" callback, so detect a blind loss off the
+	-- update loop (see SPDRN._check_run_lost) and show our Restart/Forfeit screen.
+	if not SPDRN._game_over_hooked then
+		SPDRN._game_over_hooked = true
+		local _spdrn_update_ref = Game.update
+		function Game:update(dt)
+			_spdrn_update_ref(self, dt)
+			pcall(SPDRN._check_run_lost)
+		end
+	end
+
 	SPDRN.load_spdrn_dir('objects', true)
 	if next(SMODS.find_mod('Integration')) then
 		SPDRN.load_spdrn_file('tests/main.lua')
