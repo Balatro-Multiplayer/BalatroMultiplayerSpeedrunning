@@ -183,11 +183,16 @@ SPDRN.show_lose_screen = function(buttons, keep_timer_running)
 	if SPDRN.timer and not keep_timer_running then
 		SPDRN.timer.stop()
 	end
+	local ok, def = pcall(SPDRN.create_lose_screen, buttons)
+	if not ok then
+		SPDRN.sendWarnMessage('create_lose_screen error: ' .. tostring(def))
+		return
+	end
 	play_sound('negative', 0.5, 0.7)
 	play_sound('whoosh2', 0.9, 0.7)
 	G.SETTINGS.paused = true
 	G.FUNCS.overlay_menu({
-		definition = SPDRN.create_lose_screen(buttons),
+		definition = def,
 		config = { no_esc = true },
 	})
 	G.ROOM.jiggle = G.ROOM.jiggle + 3

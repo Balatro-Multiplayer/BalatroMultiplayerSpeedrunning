@@ -9,7 +9,9 @@ MPAPI.ActionType({
 		if from_player_id == lobby.player_id then
 			G.E_MANAGER:add_event(Event({
 				func = function()
-					SPDRN.show_lose_screen()
+					if G.STAGE == G.STAGES.RUN then
+						SPDRN.show_lose_screen()
+					end
 					return true
 				end,
 			}))

@@ -14,10 +14,12 @@ MPAPI.ActionType({
 
 		G.E_MANAGER:add_event(Event({
 			func = function()
-				if won then
-					SPDRN.show_win_screen()
-				else
-					SPDRN.show_lose_screen()
+				if G.STAGE == G.STAGES.RUN then
+					if won then
+						SPDRN.show_win_screen()
+					else
+						SPDRN.show_lose_screen()
+					end
 				end
 				return true
 			end,
