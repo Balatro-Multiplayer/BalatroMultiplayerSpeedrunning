@@ -1,15 +1,29 @@
--- Start (or restart) a Balatro run safely. G.FUNCS.start_run does not tear down an existing
--- run, so calling it mid-game leaves the old run's board and HUD alive -- and the dangling
--- blind HUD crashes the blind-HUD update assert (smods src/overrides.lua), reliably at high
--- game speed. So delete the current run first, then start fresh on the next event tick (the
--- same clean-restart path the game and the base multiplayer mod use).
-local function safe_start_run(instance, deck, seed)
+-- Tear down the live run's board and blind HUD before a fresh one is started. G.FUNCS.start_run
+-- queues its own delete_run but never nils G.HUD_blind synchronously, so a stale blind HUD
+-- lingers and crashes the blind-HUD update assert (smods src/overrides.lua), reliably at high
+-- game speed. delete_run is nil-guarded and leaves G.STAGE untouched, so calling this twice
+-- (once here, once inside a gamemode's start_run) is a harmless no-op the second time.
+--
+-- G.TAROT_INTERRUPT is set while a consumable is being used and cleared by a queued event after.
+-- Tearing a run down mid-animation (or G.FUNCS.start_run's clear_queue) strands that event, so the
+-- flag leaks into the next run -- where smods handle_card_limit then skips initialising
+-- card_limits.extra_slots_used and crashes the next run's CardArea:init on nil arithmetic. Reset
+-- it so every fresh run starts from a clean interrupt state.
+function SPDRN.teardown_existing_run()
 	pcall(function()
 		if G.STAGE == G.STAGES.RUN and G.delete_run then
 			G:delete_run()
 		end
 		G.HUD_blind = nil
+		G.TAROT_INTERRUPT = nil
+		G.TAROT_INTERRUPT_PULSE = nil
 	end)
+end
+
+-- Start (or restart) a Balatro run safely: tear down the current run first, then start fresh on
+-- the next event tick (the same clean-restart path the game and the base multiplayer mod use).
+local function safe_start_run(instance, deck, seed)
+	SPDRN.teardown_existing_run()
 	G.E_MANAGER:add_event(Event({
 		blocking = false,
 		blockable = false,

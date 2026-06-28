@@ -75,6 +75,10 @@ MPAPI.GameMode({
 		lobby:action(MPAPI.ActionTypes['spdrn_player_won']):broadcast({ player_id = winner_id })
 	end,
 	start_run = function(self, deck_name, seed)
+		-- Multi-run progression reaches start_run directly (not via safe_start_run), so tear
+		-- down the finished run's blind HUD here too, else it dangles into the next run and
+		-- crashes the smods HUD_blind_debuff assert.
+		SPDRN.teardown_existing_run()
 		-- The deck is applied via G.GAME.viewed_back (the proven pattern); start_run's
 		-- `deck` arg is ignored by the base game. Resolve the ref (key or display name)
 		-- to a Back center and stage it before starting.
