@@ -1,7 +1,3 @@
------------------------------
--- Deck select overlay
------------------------------
---
 -- A pared-down version of the base game's run-setup deck picker (G.UIDEF.run_setup_option):
 -- the same deck back preview + left/right cycle + deck description, but with the stake
 -- selector, seed toggle and "Play" button removed. Used by practice (after gamemode pick)
@@ -45,7 +41,7 @@ local function to_deck_name(deck)
 			return deck
 		end
 	end
-	return 'Blue Deck'
+	return SPDRN.Deck.DEFAULT
 end
 
 -- Index of a deck display name in the ordered selection, or nil if not selected.
@@ -285,7 +281,7 @@ G.FUNCS.spdrn_deck_select_confirm = function()
 			result[i] = v
 		end
 	else
-		result = { (G.GAME.viewed_back and G.GAME.viewed_back.name) or 'Blue Deck' }
+		result = { (G.GAME.viewed_back and G.GAME.viewed_back.name) or SPDRN.Deck.DEFAULT }
 	end
 
 	local cb = _on_confirm

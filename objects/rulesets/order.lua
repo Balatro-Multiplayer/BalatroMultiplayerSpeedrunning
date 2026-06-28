@@ -1,4 +1,4 @@
 MPAPI.Ruleset({
-	key = 'spdrn_order',
+	key = SPDRN.Ruleset.ORDER,
 	layers = { 'the_order' },
 }):inject()

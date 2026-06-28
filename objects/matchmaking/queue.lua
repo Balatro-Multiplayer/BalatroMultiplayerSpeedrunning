@@ -1,0 +1,91 @@
+-- Join a matchmaking queue. kind is RANKED or CASUAL. The server treats any game_mode
+-- without the ranked prefix as casual, so casual queues use the bare gamemode key.
+function SPDRN._join_queue(kind, gamemode_key)
+	SPDRN._lobby_kind = kind
+
+	local gm = MPAPI.GameModes[gamemode_key]
+	local mm_max = gm and gm.max_players and gm.max_players.ranked or 2
+	local game_mode = (kind == SPDRN.LobbyKind.RANKED) and (SPDRN.LobbyKind.RANKED_PREFIX .. gamemode_key) or gamemode_key
+
+	local handle = MPAPI.matchmaking.queue({
+		mod_id = SPDRN.id,
+		game_mode = game_mode,
+		min_players = 2,
+		max_players = mm_max,
+	})
+
+	if not handle then
+		SPDRN.sendWarnMessage('Failed to create matchmaking handle')
+		SPDRN._lobby_kind = nil
+		return
+	end
+
+	SPDRN._current_match_handle = handle
+
+	handle:on('error', function(err)
+		SPDRN.sendWarnMessage('Matchmaking error: ' .. tostring(err))
+		SPDRN._current_match_handle = nil
+		SPDRN.matchmaking_status.stop()
+		SPDRN._show_searching_state(false)
+		SPDRN.update_main_menu_buttons()
+	end)
+
+	handle:on('queued', function(position)
+		SPDRN.sendDebugMessage('Queued at position: ' .. tostring(position))
+		SPDRN._show_searching_state(true)
+		SPDRN.matchmaking_status.start()
+	end)
+
+	handle:on('match_found', function(data)
+		SPDRN.sendDebugMessage('Match found: ' .. tostring(data.matchId))
+		SPDRN._show_searching_state(false)
+		SPDRN.matchmaking_status.stop()
+	end)
+
+	handle:on('lobby_ready', function(lobby)
+		SPDRN.sendDebugMessage(kind .. ' lobby ready: ' .. tostring(lobby.code))
+		SPDRN._lobby_kind = kind
+		SPDRN.setup_lobby_events(lobby)
+		if lobby.is_host then
+			lobby:set_metadata({ gamemode = gamemode_key, ruleset = SPDRN.Ruleset.ORDER, kind = kind })
+		end
+		-- lobby_ready fires from inside the lobby's own 'connected' handler, so a 'connected'
+		-- listener registered above would never fire. Signal ready now; the host auto-starts
+		-- once every client has reported in. Re-announce a few times in case this first ready
+		-- raced ahead of the peer's actions-topic subscription (else the host can stall).
+		SPDRN.signal_ready(true)
+		SPDRN.start_ready_resync()
+	end)
+
+	handle:on('match_resolved', function(ratings)
+		SPDRN.sendDebugMessage('Match resolved')
+		SPDRN._current_match_handle = nil
+	end)
+
+	handle:on('left', function()
+		SPDRN._current_match_handle = nil
+		SPDRN._lobby_kind = nil
+		SPDRN._show_searching_state(false)
+		SPDRN.matchmaking_status.stop()
+	end)
+end
+
+-- Back-compat alias (used by tests and older callers).
+function SPDRN._join_ranked_queue(gamemode_key)
+	return SPDRN._join_queue(SPDRN.LobbyKind.RANKED, gamemode_key)
+end
+
+function SPDRN._cancel_queue()
+	local handle = SPDRN._current_match_handle
+	if handle then
+		handle:leave()
+		SPDRN._current_match_handle = nil
+	end
+	SPDRN._lobby_kind = nil
+	SPDRN._show_searching_state(false)
+	SPDRN.matchmaking_status.stop()
+end
+
+function SPDRN._is_in_ranked_match()
+	return SPDRN._current_match_handle ~= nil and SPDRN._current_match_handle.match_id ~= nil
+end

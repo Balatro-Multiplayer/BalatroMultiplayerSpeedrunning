@@ -1,9 +1,5 @@
 SPDRN = SMODS.current_mod
 
------------------------------
--- CORE FUNCTIONS
------------------------------
-
 function SPDRN.sendDebugMessage(msg)
 	sendDebugMessage(msg, SPDRN.id)
 end
@@ -44,23 +40,17 @@ function SPDRN.load_spdrn_dir(directory, recursive)
 	end
 end
 
------------------------------
--- FILE LOADING
------------------------------
-
-SPDRN.load_spdrn_dir('ui')
-
------------------------------
--- MP REGISTER
------------------------------
+SPDRN.load_spdrn_dir('domain', true)
+SPDRN.load_spdrn_dir('ui', true)
 
 MPAPI.on_loaded(function()
 	MPAPI.register_mod({
 		id = SPDRN.id,
-		name = 'Multiplayer Speedrunning',
+		name = 'Speedrun',
 		colour = G.C.GREEN,
 		prevent_pause = true,
 		options_builder = SPDRN.create_run_options,
+		title = { base = 'spdrn_speedrun_title_base', extra = 'spdrn_speedrun_title_extra' },
 
 		-- { builder, cleanup } pair. The cleanup animates the current UIBox out
 		-- and returns (delay, on_enter) for the incoming UIBox.

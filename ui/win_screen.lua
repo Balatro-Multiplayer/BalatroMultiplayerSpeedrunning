@@ -1,7 +1,3 @@
------------------------------
--- Win screen
------------------------------
-
 function SPDRN.create_win_screen()
 	local eased_green = copy_table(G.C.GREEN)
 	eased_green[4] = 0

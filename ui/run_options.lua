@@ -1,18 +1,16 @@
------------------------------
--- Custom pause/options screen for active speedrun
------------------------------
+-- Custom pause/options screen for an active speedrun run.
 
 G.FUNCS.spdrn_seed_change = function()
 	G.FUNCS.exit_overlay_menu()
 	-- Practice is solo: there is nobody to vote with, so restart the run from the
 	-- beginning on a fresh seed directly (same effect as "Practice Again").
-	if SPDRN.get_lobby_kind() == 'practice' then
+	if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
 		local lobby = MPAPI.get_current_lobby()
 		if not lobby then
 			return
 		end
 		local meta = lobby:get_metadata()
-		SPDRN.begin_run(meta.gamemode, meta.deck or 'Blue Deck', SPDRN.generate_seed())
+		SPDRN.begin_run(meta.gamemode, meta.deck or SPDRN.Deck.DEFAULT, SPDRN.generate_seed())
 		return
 	end
 	-- A unanimous vote restarts the match on a fresh seed (see seed_vote action).
@@ -23,7 +21,7 @@ G.FUNCS.spdrn_forfeit = function()
 	G.FUNCS.exit_overlay_menu()
 	-- Practice is solo: forfeiting just ends the run, so show the game-over screen
 	-- directly rather than broadcasting a forfeit to players who aren't there.
-	if SPDRN.get_lobby_kind() == 'practice' then
+	if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
 		G.E_MANAGER:add_event(Event({
 			func = function()
 				SPDRN.show_lose_screen()

@@ -1,5 +1,5 @@
 MPAPI.GameMode({
-	key = 'spdrn_white_stake_triple',
+	key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE,
 	display_name = 'White Stake Triple',
 	has_ranked_mode = true,
 	-- Best-of-3 across three runs; re-rolling a seed mid-format is not allowed.
@@ -44,7 +44,7 @@ MPAPI.GameMode({
 			-- Last-resort guard so the next run never starts with no deck (which black-screens):
 			-- reuse the first run's deck rather than handing start_run a nil.
 			if not deck then
-				deck = (self._run_decks and self._run_decks[1]) or 'Blue Deck'
+				deck = (self._run_decks and self._run_decks[1]) or SPDRN.Deck.DEFAULT
 			end
 			-- on_ante_change runs synchronously inside ease_ante. Calling
 			-- G.FUNCS.start_run there restarts the game while the in-flight ante/round

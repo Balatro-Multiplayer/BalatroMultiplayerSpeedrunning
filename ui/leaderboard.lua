@@ -1,11 +1,8 @@
------------------------------
--- LEADERBOARD
------------------------------
 -- Speedrun leaderboard overlay, built on the generic MPAPI.ui_leaderboard. Only the
 -- gamemode tabs, columns and data source are speedrun-specific; pagination, the
 -- own-rank footer, tab switching and overlay plumbing live in MPAPI.
 
-local DEFAULT_TAB = 'spdrn_white_stake_triple'
+local DEFAULT_TAB = SPDRN.Gamemode.WHITE_STAKE_TRIPLE
 
 -- Format a server-measured run time (milliseconds) as m:ss.mmm. nil -> dash.
 local function format_time(ms)
@@ -26,8 +23,8 @@ local function get_leaderboard()
 	end
 	_leaderboard = MPAPI.ui_leaderboard({
 		tabs = {
-			{ key = 'spdrn_white_stake_triple', label = 'White Stake Triple', colour = G.C.ETERNAL },
-			{ key = 'spdrn_gold_stake_single', label = 'Gold Stake Single', colour = G.C.GOLD },
+			{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, label = 'White Stake Triple', colour = G.C.ETERNAL },
+			{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, label = 'Gold Stake Single', colour = G.C.GOLD },
 		},
 		-- Value columns rendered after rank + player name. Headers are functions so
 		-- the localization lookup happens at render time.
@@ -39,9 +36,9 @@ local function get_leaderboard()
 		},
 		empty_text = 'No ranked players yet.',
 		web_url = 'https://new.balatromp.com/leaderboards',
-		-- The server treats a 'ranked:' prefix as the rated queue; leaderboards are ranked.
+		-- Leaderboards are the rated queue, so they carry the server's ranked prefix.
 		fetch = function(tab_key, cb)
-			MPAPI.matchmaking.get_leaderboard(SPDRN.id, 'ranked:' .. tab_key, nil, {}, cb)
+			MPAPI.matchmaking.get_leaderboard(SPDRN.id, SPDRN.LobbyKind.RANKED_PREFIX .. tab_key, nil, {}, cb)
 		end,
 	})
 	return _leaderboard
@@ -51,10 +48,6 @@ end
 SPDRN.open_leaderboard = function(gamemode_key, page)
 	get_leaderboard():open(gamemode_key or DEFAULT_TAB, page)
 end
-
------------------------------
--- BUTTON HANDLERS
------------------------------
 
 -- Reopen on the last-viewed tab (the controller remembers it; defaults to the first).
 G.FUNCS.spdrn_open_leaderboard = function()

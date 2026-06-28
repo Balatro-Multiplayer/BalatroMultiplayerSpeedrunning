@@ -1,5 +1,5 @@
 MPAPI.GameMode({
-	key = 'spdrn_gold_stake_single',
+	key = SPDRN.Gamemode.GOLD_STAKE_SINGLE,
 	display_name = 'Gold Stake Single',
 	has_ranked_mode = true,
 	max_players = {

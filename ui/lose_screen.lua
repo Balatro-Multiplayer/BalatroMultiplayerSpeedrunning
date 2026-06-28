@@ -1,6 +1,4 @@
------------------------------
--- Shared end-screen button handlers (used by both win and lose screens)
------------------------------
+-- Shared end-screen button handlers (used by both win and lose screens).
 
 G.FUNCS.spdrn_continue_sp = function()
 	G.FUNCS.exit_overlay_menu()
@@ -37,7 +35,7 @@ G.FUNCS.spdrn_play_again = function()
 		return
 	end
 	local meta = lobby:get_metadata()
-	SPDRN.begin_run(meta.gamemode, meta.deck or 'Blue Deck', SPDRN.generate_seed())
+	SPDRN.begin_run(meta.gamemode, meta.deck or SPDRN.Deck.DEFAULT, SPDRN.generate_seed())
 end
 
 -- Restart the current run after losing it to a blind: same seed, same gamemode
@@ -63,7 +61,7 @@ end
 function SPDRN.end_screen_buttons(is_winner)
 	local kind = SPDRN.get_lobby_kind()
 	local specs = {}
-	if kind == 'practice' then
+	if kind == SPDRN.LobbyKind.PRACTICE then
 		specs[#specs + 1] = { button = 'spdrn_play_again', label = 'Practice Again', colour = G.C.BLUE }
 		specs[#specs + 1] = { button = 'spdrn_leave_from_game', label = 'Back to Main Menu', colour = G.C.RED }
 	elseif SPDRN.is_matchmaking(kind) then
@@ -79,10 +77,6 @@ function SPDRN.end_screen_buttons(is_winner)
 
 	return MPAPI.end_screen_buttons(specs)
 end
-
------------------------------
--- Lose screen
------------------------------
 
 function SPDRN.create_lose_screen(buttons)
 	local eased_red = copy_table(G.GAME.round_resets.ante <= G.GAME.win_ante and G.C.RED or G.C.BLUE)

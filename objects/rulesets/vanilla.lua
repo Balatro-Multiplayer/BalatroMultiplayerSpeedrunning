@@ -1,3 +1,3 @@
 MPAPI.Ruleset({
-	key = 'spdrn_vanilla',
+	key = SPDRN.Ruleset.VANILLA,
 }):inject()

@@ -28,17 +28,21 @@ MPAPI.ActionType({
 		-- The start has landed; stop the ready re-announce loop.
 		SPDRN.stop_ready_resync()
 
-		if SPDRN.get_lobby_kind() == 'practice' then
+		if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
 			proceed(meta.deck)
 		elseif gm_def.ban_pick and SPDRN.is_matchmaking() then
 			-- Matchmaking (always 2 players): run the deck draft, then the synced
 			-- countdown on the surviving decks. Every client runs this off the same
-			-- broadcast, so the draft stays in lockstep.
+			-- broadcast, so the draft stays in lockstep. The draft renders inline in the
+			-- matchmaking lobby controls (see build_matchmaking_controls).
 			MPAPI.BanPick.start(lobby, {
 				pool_size = gm_def.ban_pick.pool_size,
 				keep = gm_def.ban_pick.keep,
 				state_action = 'spdrn_ban_pick_state',
 				ban_action = 'spdrn_ban_pick_ban',
+				on_refresh = function()
+					SPDRN.lobby.refresh_mm_status()
+				end,
 			}, function(survivors)
 				SPDRN.show_countdown(function()
 					proceed(survivors)
