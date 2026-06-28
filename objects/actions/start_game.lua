@@ -42,13 +42,13 @@ MPAPI.ActionType({
 			}, function(survivors)
 				SPDRN.show_countdown(function()
 					proceed(survivors)
-				end)
+				end, survivors)
 			end)
 		else
 			-- Private + matchmaking without a draft: synced 5s countdown, single deck.
 			SPDRN.show_countdown(function()
 				proceed(meta.deck)
-			end)
+			end, meta.deck)
 		end
 	end,
 })

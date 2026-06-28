@@ -57,7 +57,7 @@ SPDRN.load_spdrn_dir('ui')
 MPAPI.on_loaded(function()
 	MPAPI.register_mod({
 		id = SPDRN.id,
-		name = 'Speedrun',
+		name = 'Multiplayer Speedrunning',
 		colour = G.C.GREEN,
 		prevent_pause = true,
 		options_builder = SPDRN.create_run_options,

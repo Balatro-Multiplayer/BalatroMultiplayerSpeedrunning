@@ -130,6 +130,7 @@ function SPDRN._join_queue(kind, gamemode_key)
 
 	handle:on('left', function()
 		SPDRN._current_match_handle = nil
+		SPDRN._lobby_kind = nil
 		SPDRN._show_searching_state(false)
 		_stop_queue_timer()
 	end)
@@ -146,6 +147,7 @@ function SPDRN._cancel_queue()
 		handle:leave()
 		SPDRN._current_match_handle = nil
 	end
+	SPDRN._lobby_kind = nil
 	SPDRN._show_searching_state(false)
 	_stop_queue_timer()
 end

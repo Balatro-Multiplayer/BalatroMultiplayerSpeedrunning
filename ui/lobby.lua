@@ -345,11 +345,21 @@ SPDRN.setup_lobby_events = function(lobby)
 		update_game_buttons()
 	end)
 
+	-- Private lobbies build their control bar from lobby state at build time (deck label,
+	-- host's START/OPTIONS vs guest's READY), so a deck or host change has to rebuild the
+	-- view, not just patch the START button. Matchmaking lobbies have only a status line,
+	-- so they keep the light path (and avoid player-card flicker).
 	lobby:on('metadata_changed', function(metadata)
+		if not SPDRN.is_matchmaking() then
+			MPAPI.refresh_current_view()
+		end
 		update_game_buttons()
 	end)
 
 	lobby:on('host_changed', function()
+		if not SPDRN.is_matchmaking() then
+			MPAPI.refresh_current_view()
+		end
 		update_game_buttons()
 	end)
 
@@ -367,6 +377,10 @@ SPDRN.setup_lobby_events = function(lobby)
 		_local_ready = false
 		_start_broadcasted = false
 		SPDRN._lobby_kind = nil
+		-- The match handle is independent of the lobby (lobby:leave() does not fire the
+		-- handle's 'left'). Drop it here so a later solo run's win path can't report a
+		-- result against the finished match.
+		SPDRN._current_match_handle = nil
 	end)
 end
 
@@ -804,15 +818,51 @@ function SPDRN.broadcast_start(seed)
 	action:broadcast({ seed = seed or SPDRN.generate_seed() })
 end
 
+-- One face-down deck-back tile (the deck's back sprite + its name), built with the same
+-- bypass_back Card pattern as the lobby player cards. `ref` is a deck name or center key.
+local function deck_back_tile(ref)
+	local key = SPDRN.resolve_back_key(ref) or 'b_red'
+	local center = G.P_CENTERS[key]
+	local name = (center and center.name) or key
+	local area = CardArea(G.ROOM.T.x + 0.2 * G.ROOM.T.w / 2, G.ROOM.T.h, G.CARD_W, G.CARD_H, { card_limit = 1, type = 'title', highlight_limit = 0, collection = true })
+	local card = Card(area.T.x + area.T.w / 2, area.T.y, G.CARD_W, G.CARD_H, nil, G.P_CENTERS['j_joker'], { bypass_back = center.pos })
+	card.no_ui = true
+	card.states.drag.can = false
+	card:flip()
+	area:emplace(card, nil, true)
+	return { n = G.UIT.C, config = { align = 'cm', padding = 0.12 }, nodes = {
+		{ n = G.UIT.R, config = { align = 'cm' }, nodes = { { n = G.UIT.O, config = { object = area } } } },
+		{ n = G.UIT.R, config = { align = 'cm', padding = 0.04 }, nodes = {
+			{ n = G.UIT.T, config = { text = name, scale = 0.3, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+		} },
+	} }
+end
+
+-- A row of deck-back tiles for the countdown overlay. `decks` is a single deck ref or an
+-- ordered list (e.g. the ban-pick survivors, one run each).
+local function deck_backs_row(decks)
+	local refs = type(decks) == 'table' and decks or { decks }
+	local cols = {}
+	for _, ref in ipairs(refs) do
+		cols[#cols + 1] = deck_back_tile(ref)
+	end
+	return { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = cols }
+end
+
 -- 5s synced countdown overlay, then on_complete(). Used for private + matchmaking
 -- starts (practice skips it and calls begin_run directly). Delegates to the generic
--- MPAPI.show_countdown, supplying the speedrun-localized label.
-function SPDRN.show_countdown(on_complete)
-	MPAPI.show_countdown({
+-- MPAPI.show_countdown, supplying the speedrun-localized label and the selected deck
+-- back(s). `decks` is a single deck ref or an ordered list.
+function SPDRN.show_countdown(on_complete, decks)
+	local opts = {
 		label = function(n)
 			return (localize('k_starting_in') or 'Starting in') .. ' ' .. n
 		end,
-	}, on_complete)
+	}
+	if decks then
+		opts.contents = { deck_backs_row(decks) }
+	end
+	MPAPI.show_countdown(opts, on_complete)
 end
 
 -- Host (private) clicks START -> broadcast the start to everyone.

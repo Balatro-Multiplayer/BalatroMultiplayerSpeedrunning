@@ -1,6 +1,6 @@
 {
-  "id": "MultiplayerSpeedrunning",
-  "name": "MultiplayerSpeedrunning",
+  "id": "MultiplayerSPDRN",
+  "name": "MultiplayerSPDRN",
   "display_name": "Multiplayer Speedrunning",
   "author": ["Virtualized", "Bean", "ArtifexDigital"],
   "description": "A speedrunning mod that allows players to compete in real time",
@@ -16,5 +16,5 @@
     "Balatro (>=1.0.1o)",
     "MultiplayerAPI"
   ],
-  "conflicts": []
+  "conflicts": ["Multiplayer"]
 }
