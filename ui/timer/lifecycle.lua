@@ -1,13 +1,22 @@
 SPDRN.timer = SPDRN.timer or {}
 local timer = SPDRN.timer
 
--- Begin (or restart) the on-screen timer. Called from SPDRN.begin_run /
--- SPDRN.restart_current_run right after SPDRN._run_started_at is set.
+-- Begin the on-screen timer from zero. Called from SPDRN.begin_run right after
+-- SPDRN._run_started_at is set for a brand-new run.
 function timer.start()
 	timer._active = true
 	timer._frozen = false
 	timer._entered_run = false
 	timer.text = timer.format(0)
+	timer._install_sysclock_hook()
+end
+
+-- Resume a timer frozen by the lose screen without resetting the elapsed time, so a
+-- restart-after-death keeps counting the same way multi-run progression does (the run
+-- clock is never reset between runs of one game).
+function timer.resume()
+	timer._active = true
+	timer._frozen = false
 	timer._install_sysclock_hook()
 end
 

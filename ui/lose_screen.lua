@@ -175,8 +175,12 @@ function SPDRN.create_lose_screen(buttons)
 	return t
 end
 
-SPDRN.show_lose_screen = function(buttons)
-	if SPDRN.timer then
+-- `keep_timer_running` is set only for the run-lost-to-a-blind screen: that's a restartable
+-- run loss, not the match ending, so the speedrun clock must keep counting (including the time
+-- spent deciding on this screen). Every terminal screen -- win, opponent-won, forfeit -- leaves
+-- it unset so the timer freezes at the match's final time.
+SPDRN.show_lose_screen = function(buttons, keep_timer_running)
+	if SPDRN.timer and not keep_timer_running then
 		SPDRN.timer.stop()
 	end
 	play_sound('negative', 0.5, 0.7)
@@ -194,7 +198,7 @@ end
 -- Shown when the player loses their run to a blind (as opposed to an opponent
 -- winning): same presentation as the lose screen but offering Restart Run / Forfeit.
 SPDRN.show_run_lost_screen = function()
-	SPDRN.show_lose_screen(SPDRN.run_lost_buttons())
+	SPDRN.show_lose_screen(SPDRN.run_lost_buttons(), true)
 end
 
 -- Balatro has no single "you lost" callback, so we watch the game-over state off

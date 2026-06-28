@@ -87,9 +87,11 @@ function SPDRN.restart_current_run()
 	local deck = (instance._run_decks and instance._run_decks[run_idx])
 		or SPDRN._run_deck or meta_deck_for_run or SPDRN.Deck.DEFAULT
 	SPDRN.lobby.seed_votes:reset()
-	SPDRN._run_started_at = love.timer.getTime()
+	-- Don't reset SPDRN._run_started_at: a restart continues the same run clock, matching
+	-- multi-run progression. resume() keeps the timer active without zeroing it (and is a safe
+	-- no-op since the run-lost screen no longer freezes the clock).
 	if SPDRN.timer then
-		SPDRN.timer.start()
+		SPDRN.timer.resume()
 	end
 	safe_start_run(instance, deck, seed)
 end
