@@ -46,13 +46,18 @@ MPAPI.GameMode({
 			if not deck then
 				deck = (self._run_decks and self._run_decks[1]) or SPDRN.Deck.DEFAULT
 			end
+			-- Each run plays a distinct seed derived deterministically from the match's base
+			-- seed, so both players in a ranked best-of-3 race the same boards (run 1 is the
+			-- broadcast seed; runs 2 and 3 derive from it). A same-seed restart-on-death reuses
+			-- this run's live seed, so it stays consistent with the derived sequence.
+			local seed = SPDRN.derive_seed(self._base_seed, run_idx)
 			-- on_ante_change runs synchronously inside ease_ante. Calling
 			-- G.FUNCS.start_run there restarts the game while the in-flight ante/round
 			-- transition still holds references to the old state, which crashes. Defer
 			-- the restart to the next event tick so it runs after ease_ante unwinds.
 			G.E_MANAGER:add_event(Event({
 				func = function()
-					self:start_run(deck)
+					self:start_run(deck, seed)
 					return true
 				end,
 			}))

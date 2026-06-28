@@ -1,9 +1,29 @@
+local SEED_CHARS = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'
+
 SPDRN.generate_seed = function()
-	local chars = 'ABCDEFGHIJKLMNPQRSTUVWXYZ123456789'
 	local seed = ''
 	for i = 1, 8 do
-		local idx = math.random(1, #chars)
-		seed = seed .. chars:sub(idx, idx)
+		local idx = math.random(1, #SEED_CHARS)
+		seed = seed .. SEED_CHARS:sub(idx, idx)
+	end
+	return seed
+end
+
+-- Deterministically derive run N's seed from the match's base (run-1) seed. Every client
+-- shares the broadcast base seed, so they all compute identical seeds for the later runs of a
+-- multi-run format without an extra broadcast. The per-character djb2 hash is kept under 2^24
+-- so `h * 33` never loses precision in LuaJIT's double arithmetic (keeping it cross-client
+-- deterministic); this is a spread function for seed strings, not a security hash.
+SPDRN.derive_seed = function(base_seed, run_idx)
+	local seed = ''
+	for i = 1, 8 do
+		local material = tostring(base_seed) .. ':' .. tostring(run_idx) .. ':' .. i
+		local h = 5381
+		for j = 1, #material do
+			h = (h * 33 + material:byte(j)) % 16777216
+		end
+		local idx = (h % #SEED_CHARS) + 1
+		seed = seed .. SEED_CHARS:sub(idx, idx)
 	end
 	return seed
 end

@@ -63,6 +63,10 @@ function SPDRN.begin_run(gamemode_key, decks, seed)
 	end
 	local instance = gm_def:new_instance()
 	instance._run_decks = deck_list
+	-- The match's base seed (run 1). Multi-run formats derive their later runs' seeds from this
+	-- so every client lands on the same sequence (see SPDRN.derive_seed). All clients receive the
+	-- same broadcast `seed`, so this is identical across the lobby.
+	instance._base_seed = seed
 	lobby._gamemode_instance = instance
 	safe_start_run(instance, deck_list[1], seed)
 end
