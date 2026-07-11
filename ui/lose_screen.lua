@@ -78,11 +78,9 @@ function SPDRN.end_screen_buttons(is_winner)
 	return MPAPI.end_screen_buttons(specs)
 end
 
-function SPDRN.create_lose_screen(buttons)
-	local eased_red = copy_table(G.GAME.round_resets.ante <= G.GAME.win_ante and G.C.RED or G.C.BLUE)
-	eased_red[4] = 0
-	ease_value(eased_red, 4, 0.8, nil, nil, true)
-
+-- The speedrun-specific body of the lose screen, rendered inside the shared
+-- MPAPI.end_screen shell.
+function SPDRN.lose_body(buttons)
 	local right_col = {
 		create_UIBox_round_scores_row('furthest_ante', G.C.FILTER),
 		create_UIBox_round_scores_row('furthest_round', G.C.FILTER),
@@ -93,58 +91,43 @@ function SPDRN.create_lose_screen(buttons)
 		right_col[#right_col + 1] = b
 	end
 
-	local t = create_UIBox_generic_options({
-		bg_colour = eased_red,
-		no_back = true,
-		no_esc = true,
-		padding = 0,
-		contents = {
+	return {
+		n = G.UIT.R,
+		config = { align = 'cm', padding = 0.15 },
+		nodes = {
 			{
-				n = G.UIT.R,
+				n = G.UIT.C,
 				config = { align = 'cm' },
 				nodes = {
-					{ n = G.UIT.O, config = { object = DynaText({ string = { localize('ph_game_over') }, colours = { G.C.RED }, shadow = true, float = true, scale = 1.5, pop_in = 0.4, maxw = 6.5 }) } },
-				},
-			},
-			{
-				n = G.UIT.R,
-				config = { align = 'cm', padding = 0.15 },
-				nodes = {
 					{
-						n = G.UIT.C,
-						config = { align = 'cm' },
+						n = G.UIT.R,
+						config = { align = 'cm', padding = 0.05, colour = G.C.BLACK, emboss = 0.05, r = 0.1 },
 						nodes = {
+							{ n = G.UIT.R, config = { align = 'cm', padding = 0.08 }, nodes = {
+								create_UIBox_round_scores_row('hand'),
+								create_UIBox_round_scores_row('poker_hand'),
+							} },
 							{
 								n = G.UIT.R,
-								config = { align = 'cm', padding = 0.05, colour = G.C.BLACK, emboss = 0.05, r = 0.1 },
+								config = { align = 'cm' },
 								nodes = {
-									{ n = G.UIT.R, config = { align = 'cm', padding = 0.08 }, nodes = {
-										create_UIBox_round_scores_row('hand'),
-										create_UIBox_round_scores_row('poker_hand'),
-									} },
 									{
-										n = G.UIT.R,
-										config = { align = 'cm' },
+										n = G.UIT.C,
+										config = { align = 'cm', padding = 0.08 },
 										nodes = {
-											{
-												n = G.UIT.C,
-												config = { align = 'cm', padding = 0.08 },
-												nodes = {
-													create_UIBox_round_scores_row('cards_played', G.C.BLUE),
-													create_UIBox_round_scores_row('cards_discarded', G.C.RED),
-													create_UIBox_round_scores_row('cards_purchased', G.C.MONEY),
-													create_UIBox_round_scores_row('times_rerolled', G.C.GREEN),
-													create_UIBox_round_scores_row('new_collection', G.C.WHITE),
-													create_UIBox_round_scores_row('seed', G.C.WHITE),
-													UIBox_button({ button = 'copy_seed', label = { localize('b_copy') }, colour = G.C.BLUE, scale = 0.3, minw = 2.3, minh = 0.4, focus_args = { nav = 'wide' } }),
-												},
-											},
-											{
-												n = G.UIT.C,
-												config = { align = 'tr', padding = 0.08 },
-												nodes = right_col,
-											},
+											create_UIBox_round_scores_row('cards_played', G.C.BLUE),
+											create_UIBox_round_scores_row('cards_discarded', G.C.RED),
+											create_UIBox_round_scores_row('cards_purchased', G.C.MONEY),
+											create_UIBox_round_scores_row('times_rerolled', G.C.GREEN),
+											create_UIBox_round_scores_row('new_collection', G.C.WHITE),
+											create_UIBox_round_scores_row('seed', G.C.WHITE),
+											UIBox_button({ button = 'copy_seed', label = { localize('b_copy') }, colour = G.C.BLUE, scale = 0.3, minw = 2.3, minh = 0.4, focus_args = { nav = 'wide' } }),
 										},
+									},
+									{
+										n = G.UIT.C,
+										config = { align = 'tr', padding = 0.08 },
+										nodes = right_col,
 									},
 								},
 							},
@@ -153,26 +136,23 @@ function SPDRN.create_lose_screen(buttons)
 				},
 			},
 		},
-	})
-
-	t.nodes[1] = {
-		n = G.UIT.R,
-		config = { align = 'cm', padding = 0.1 },
-		nodes = {
-			{
-				n = G.UIT.C,
-				config = { align = 'cm', padding = 2 },
-				nodes = {
-					{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
-						{ n = G.UIT.O, config = { padding = 0, id = 'jimbo_spot', object = Moveable(0, 0, G.CARD_W * 1.1, G.CARD_H * 1.1) } },
-					} },
-				},
-			},
-			{ n = G.UIT.C, config = { align = 'cm', padding = 0.1 }, nodes = { t.nodes[1] } },
-		},
 	}
+end
 
-	return t
+-- Loss uses RED at/under the win-ante, BLUE beyond it (a "you gave up a winnable run").
+local function lose_bg_colour()
+	return (G.GAME.round_resets.ante <= G.GAME.win_ante) and G.C.RED or G.C.BLUE
+end
+
+function SPDRN.create_lose_screen(buttons)
+	return MPAPI.end_screen_uibox({
+		won = false,
+		no_esc = true,
+		bg_colour = lose_bg_colour(),
+		body = function()
+			return SPDRN.lose_body(buttons)
+		end,
+	})
 end
 
 -- `keep_timer_running` is set only for the run-lost-to-a-blind screen: that's a restartable
@@ -183,21 +163,17 @@ SPDRN.show_lose_screen = function(buttons, keep_timer_running)
 	if SPDRN.timer and not keep_timer_running then
 		SPDRN.timer.stop()
 	end
-	local ok, def = pcall(SPDRN.create_lose_screen, buttons)
-	if not ok then
-		SPDRN.sendWarnMessage('create_lose_screen error: ' .. tostring(def))
-		return
-	end
-	play_sound('negative', 0.5, 0.7)
-	play_sound('whoosh2', 0.9, 0.7)
-	G.SETTINGS.paused = true
-	G.FUNCS.overlay_menu({
-		definition = def,
-		config = { no_esc = true },
+	MPAPI.end_screen_show({
+		won = false,
+		no_esc = true,
+		bg_colour = lose_bg_colour(),
+		sounds = { { 'negative', 0.5, 0.7 }, { 'whoosh2', 0.9, 0.7 } },
+		room_jiggle = 3,
+		quip = { prefix = 'lq_', max = 10 },
+		body = function()
+			return SPDRN.lose_body(buttons)
+		end,
 	})
-	G.ROOM.jiggle = G.ROOM.jiggle + 3
-
-	MPAPI.animate_jimbo_quip('lq_', 10)
 end
 
 -- Shown when the player loses their run to a blind (as opposed to an opponent

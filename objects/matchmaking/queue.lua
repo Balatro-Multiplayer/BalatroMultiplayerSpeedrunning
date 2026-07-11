@@ -27,21 +27,20 @@ function SPDRN._join_queue(kind, gamemode_key)
 	handle:on('error', function(err)
 		SPDRN.sendWarnMessage('[mmdbg] Matchmaking error: ' .. tostring(err))
 		SPDRN._current_match_handle = nil
-		SPDRN.matchmaking_status.stop()
 		SPDRN._show_searching_state(false)
 		SPDRN.update_main_menu_buttons()
 	end)
 
 	handle:on('queued', function(position)
 		SPDRN.sendDebugMessage('[mmdbg] Queued at position: ' .. tostring(position))
+		-- The elapsed "Queueing m:ss" display is driven centrally by the API now
+		-- (api/matchmaking/queue_timer.lua), started on this same QUEUED event.
 		SPDRN._show_searching_state(true)
-		SPDRN.matchmaking_status.start()
 	end)
 
 	handle:on('match_found', function(data)
 		SPDRN.sendDebugMessage('[mmdbg] Match found: ' .. tostring(data.matchId) .. ' lobbyCode=' .. tostring(data.lobbyCode) .. ' gameMode=' .. tostring(data.gameMode))
 		SPDRN._show_searching_state(false)
-		SPDRN.matchmaking_status.stop()
 	end)
 
 	handle:on('lobby_ready', function(lobby)
@@ -69,7 +68,6 @@ function SPDRN._join_queue(kind, gamemode_key)
 		SPDRN._current_match_handle = nil
 		SPDRN._lobby_kind = nil
 		SPDRN._show_searching_state(false)
-		SPDRN.matchmaking_status.stop()
 	end)
 end
 
@@ -86,7 +84,6 @@ function SPDRN._cancel_queue()
 	end
 	SPDRN._lobby_kind = nil
 	SPDRN._show_searching_state(false)
-	SPDRN.matchmaking_status.stop()
 end
 
 function SPDRN._is_in_ranked_match()
