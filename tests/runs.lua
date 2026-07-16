@@ -24,7 +24,7 @@ end
 
 -- Verifies the win hook fires through the real ease_ante call,
 -- not by calling ease_ante directly.
--- ease_ante fires during beat_blind's scoring; on_ante_change(9) broadcasts win
+-- ease_ante fires during beat_blind's scoring; calculate({ante_change=true}) broadcasts win
 -- synchronously before the game reaches ROUND_EVAL, so no cash_out is needed.
 BInt.register_test('spdrn:run_gss_win_via_game_loop', function(test)
 	test:start_run({ seed = 'GSSRUN1' })
@@ -43,7 +43,7 @@ BInt.register_test('spdrn:run_gss_win_via_game_loop', function(test)
 		test:select_blind():assert()
 		test:set_blind_goal(1)
 		test:beat_blind():assert()
-		-- ease_ante fired → on_ante_change(9) → win broadcast; game goes to win screen (not shop)
+		-- ease_ante fired → calculate({ante_change=true}) → win broadcast; game goes to win screen (not shop)
 
 		test:assert_eq(#lobby.recorded_broadcasts, 1, 'win should broadcast once after ante 8 boss')
 		test:assert_eq(lobby.recorded_broadcasts[1].action_key, 'spdrn_player_won')
@@ -83,7 +83,7 @@ BInt.register_test('spdrn:run_wst_run_count_via_game_loop', function(test)
 		test:select_blind():assert()
 		test:set_blind_goal(1)
 		test:beat_blind():assert()
-		-- ease_ante fired → on_ante_change(9) → _run_count=1 → instance.start_run() (stubbed)
+		-- ease_ante fired → calculate({ante_change=true}) → _run_count=1 → instance.start_run() (stubbed)
 		-- game goes to win screen (not shop)
 
 		test:assert_eq(instance._run_count, 1, '_run_count should be 1 after first boss beat')
@@ -116,7 +116,7 @@ BInt.register_test('spdrn:run_wst_triple_win_via_game_loop', function(test)
 		test:select_blind():assert()
 		test:set_blind_goal(1)
 		test:beat_blind():assert()
-		-- ease_ante fired → on_ante_change(9) → _run_count=3 → win broadcast, reset to 0
+		-- ease_ante fired → calculate({ante_change=true}) → _run_count=3 → win broadcast, reset to 0
 
 		test:assert_eq(instance._run_count, 0, '_run_count should reset to 0 after third win')
 		test:assert_eq(#lobby.recorded_broadcasts, 1, 'win should broadcast on third boss beat')
@@ -148,7 +148,7 @@ BInt.register_test('spdrn:run_wst_full_triple', function(test)
 	test:start_run({ seed = 'WST_FULL', stake = 1 })
 	setup()
 
-	-- Run 1 of 3: on_ante_change(9) → _run_count=1 → G.FUNCS.start_run → restart hook fires
+	-- Run 1 of 3: calculate({ante_change=true}) → _run_count=1 → G.FUNCS.start_run → restart hook fires
 	test:on_restart(setup)
 	test:skip_to(8, 'boss')
 	test:select_blind():assert()
@@ -156,7 +156,7 @@ BInt.register_test('spdrn:run_wst_full_triple', function(test)
 	test:beat_blind():assert()
 	-- restart occurred; setup() re-injected lobby+instance; test resumes at new BLIND_SELECT
 
-	-- Run 2 of 3: on_ante_change(9) → _run_count=2 → restart
+	-- Run 2 of 3: calculate({ante_change=true}) → _run_count=2 → restart
 	test:on_restart(setup)
 	test:skip_to(8, 'boss')
 	test:select_blind():assert()
@@ -164,7 +164,7 @@ BInt.register_test('spdrn:run_wst_full_triple', function(test)
 	test:beat_blind():assert()
 	-- restart occurred; test resumes at new BLIND_SELECT
 
-	-- Run 3 of 3: on_ante_change(9) → _run_count=3 → resets to 0 → win broadcast
+	-- Run 3 of 3: calculate({ante_change=true}) → _run_count=3 → resets to 0 → win broadcast
 	test:skip_to(8, 'boss')
 	test:select_blind():assert()
 	test:set_blind_goal(1)
@@ -256,7 +256,7 @@ BInt.register_test('spdrn:run_two_client_p1_wins_p2_sees_lose', function(test)
 		test:select_blind():assert()
 		test:set_blind_goal(1)
 		test:beat_blind():assert()
-		-- ease_ante(1) fired → on_ante_change(9) → mesh broadcasts spdrn_player_won
+		-- ease_ante(1) fired → calculate({ante_change=true}) → mesh broadcasts spdrn_player_won
 		-- show_win/show_lose events queued before ROUND_EVAL and fire before beat_blind returns
 
 		test:assert_eq(#mesh.lobby1.recorded_broadcasts, 1, 'p1 should have broadcast the win')

@@ -1,3 +1,12 @@
+-- The defined winning code path: a gamemode's calculate/on_player_forfeit just
+-- returns { winner = player_id } and never touches this ActionType directly.
+MPAPI.on_winner_declared(function(winner_id)
+	local lobby = MPAPI.get_current_lobby()
+	if lobby then
+		lobby:action(MPAPI.ActionTypes['spdrn_player_won']):broadcast({ player_id = winner_id })
+	end
+end)
+
 MPAPI.ActionType({
 	key = 'spdrn_player_won',
 	on_receive = function(action_type, from_player_id, params)

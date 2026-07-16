@@ -13,7 +13,11 @@ MPAPI.GameMode({
 		self._win_fired = false
 		self._forfeited = {}
 	end,
-	on_ante_change = function(self, ante)
+	calculate = function(self, context)
+		if not context.ante_change then
+			return
+		end
+		local ante = context.ante
 		if ante < 9 then
 			self._win_fired = false
 			return
@@ -27,16 +31,14 @@ MPAPI.GameMode({
 		if not lobby then
 			return
 		end
-		local action = lobby:action(MPAPI.ActionTypes['spdrn_player_won'])
-		action:broadcast({ player_id = lobby.player_id })
+		return { winner = lobby.player_id }
 	end,
 	on_player_forfeit = function(self, player_id)
 		local winner_id = self:check_single_survivor(player_id)
 		if not winner_id then
 			return
 		end
-		local lobby = MPAPI.get_current_lobby()
-		lobby:action(MPAPI.ActionTypes['spdrn_player_won']):broadcast({ player_id = winner_id })
+		return { winner = winner_id }
 	end,
 	start_run = function(self, deck_name, seed)
 		-- The deck is applied via G.GAME.viewed_back (the proven pattern); start_run's

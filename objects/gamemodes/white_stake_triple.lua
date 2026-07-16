@@ -16,7 +16,11 @@ MPAPI.GameMode({
 		self._ante9_fired = false
 		self._forfeited = {}
 	end,
-	on_ante_change = function(self, ante)
+	calculate = function(self, context)
+		if not context.ante_change then
+			return
+		end
+		local ante = context.ante
 		if ante < 9 then
 			self._ante9_fired = false
 			return
@@ -51,7 +55,7 @@ MPAPI.GameMode({
 			-- broadcast seed; runs 2 and 3 derive from it). A same-seed restart-on-death reuses
 			-- this run's live seed, so it stays consistent with the derived sequence.
 			local seed = SPDRN.derive_seed(self._base_seed, run_idx)
-			-- on_ante_change runs synchronously inside ease_ante. Calling
+			-- calculate's ante_change branch runs synchronously inside ease_ante. Calling
 			-- G.FUNCS.start_run there restarts the game while the in-flight ante/round
 			-- transition still holds references to the old state, which crashes. Defer
 			-- the restart to the next event tick so it runs after ease_ante unwinds.
@@ -67,8 +71,7 @@ MPAPI.GameMode({
 			if not lobby then
 				return
 			end
-			local action = lobby:action(MPAPI.ActionTypes['spdrn_player_won'])
-			action:broadcast({ player_id = lobby.player_id })
+			return { winner = lobby.player_id }
 		end
 	end,
 	on_player_forfeit = function(self, player_id)
@@ -76,8 +79,7 @@ MPAPI.GameMode({
 		if not winner_id then
 			return
 		end
-		local lobby = MPAPI.get_current_lobby()
-		lobby:action(MPAPI.ActionTypes['spdrn_player_won']):broadcast({ player_id = winner_id })
+		return { winner = winner_id }
 	end,
 	start_run = function(self, deck_name, seed)
 		-- Multi-run progression reaches start_run directly (not via safe_start_run), so tear
