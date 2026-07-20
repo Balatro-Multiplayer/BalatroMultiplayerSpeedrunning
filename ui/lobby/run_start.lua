@@ -20,18 +20,38 @@ function SPDRN.teardown_existing_run()
 	end)
 end
 
+-- Pending run-start/restart request, consumed outside any Event's call stack -- see
+-- SPDRN._check_pending_run_transition, polled from core.lua's Game:update hook (the same spot
+-- SPDRN._check_run_lost already runs from). Deferring via another queued Event is NOT safe here:
+-- G.FUNCS.start_run calls G.E_MANAGER:clear_queue(), and calling that from inside an Event.func
+-- that EventManager:update() is still iterating corrupts the iterator's stale index -- its next
+-- unconditional table.remove(v, i) can delete the screenwipe overlay's own cleanup event (the
+-- screen stays black forever, locked, since G.CONTROLLER.locks.wipe follows G.screenwipe ~= nil)
+-- or the real G:start_run() call itself (nothing gets rebuilt), depending on what else happens to
+-- be queued at that instant -- which is exactly why White Stake Triple's deck switch black-
+-- screened only sometimes. Confirmed by directly reproducing the EventManager mutation-during-
+-- iteration hazard in isolation. A flag polled on the next Game:update tick runs after that
+-- frame's EventManager:update() has already returned, so it's never inside an active iteration.
+SPDRN._pending_run_transition = nil
+
+function SPDRN.request_run_transition(instance, deck, seed)
+	SPDRN._pending_run_transition = { instance = instance, deck = deck, seed = seed }
+end
+
+function SPDRN._check_pending_run_transition()
+	local pending = SPDRN._pending_run_transition
+	if not pending then
+		return
+	end
+	SPDRN._pending_run_transition = nil
+	pending.instance:start_run(pending.deck, pending.seed)
+end
+
 -- Start (or restart) a Balatro run safely: tear down the current run first, then start fresh on
--- the next event tick (the same clean-restart path the game and the base multiplayer mod use).
+-- the next Game:update tick (see SPDRN.request_run_transition above for why not another Event).
 local function safe_start_run(instance, deck, seed)
 	SPDRN.teardown_existing_run()
-	G.E_MANAGER:add_event(Event({
-		blocking = false,
-		blockable = false,
-		func = function()
-			instance:start_run(deck, seed)
-			return true
-		end,
-	}))
+	SPDRN.request_run_transition(instance, deck, seed)
 end
 
 -- Instantiate the gamemode for the current lobby and start the Balatro run. Shared by the

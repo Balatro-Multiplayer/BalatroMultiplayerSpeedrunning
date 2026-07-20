@@ -57,14 +57,14 @@ MPAPI.GameMode({
 			local seed = SPDRN.derive_seed(self._base_seed, run_idx)
 			-- calculate's ante_change branch runs synchronously inside ease_ante. Calling
 			-- G.FUNCS.start_run there restarts the game while the in-flight ante/round
-			-- transition still holds references to the old state, which crashes. Defer
-			-- the restart to the next event tick so it runs after ease_ante unwinds.
-			G.E_MANAGER:add_event(Event({
-				func = function()
-					self:start_run(deck, seed)
-					return true
-				end,
-			}))
+			-- transition still holds references to the old state, which crashes. Defer via
+			-- SPDRN.request_run_transition (consumed on the next Game:update tick, outside
+			-- any Event's call stack) rather than another queued Event -- the latter can
+			-- still be mid-iteration when this fires, and start_run's own clear_queue() call
+			-- would corrupt that iteration (see the comment on request_run_transition for the
+			-- full mechanism -- this was the actual cause of the black-screen-on-deck-switch
+			-- bug, not just the crash this defer originally guarded against).
+			SPDRN.request_run_transition(self, deck, seed)
 		else
 			self._run_count = 0
 			local lobby = MPAPI.get_current_lobby()

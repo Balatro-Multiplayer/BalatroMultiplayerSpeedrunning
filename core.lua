@@ -100,19 +100,20 @@ MPAPI.on_loaded(function()
 
 	-- Balatro has no single "you lost" callback, so detect a blind loss off the
 	-- update loop (see SPDRN._check_run_lost) and show our Restart/Forfeit screen.
+	-- Also polls for a pending run-start/restart request (see SPDRN.request_run_transition
+	-- in ui/lobby/run_start.lua) -- this runs after the frame's own EventManager:update()
+	-- has already returned, which is why it's the safe place to perform it.
 	if not SPDRN._game_over_hooked then
 		SPDRN._game_over_hooked = true
 		local _spdrn_update_ref = Game.update
 		function Game:update(dt)
 			_spdrn_update_ref(self, dt)
 			pcall(SPDRN._check_run_lost)
+			pcall(SPDRN._check_pending_run_transition)
 		end
 	end
 
 	SPDRN.load_spdrn_dir('objects', true)
-	if next(SMODS.find_mod('Integration')) then
-		SPDRN.load_spdrn_file('tests/main.lua')
-	end
 end)
 
 SPDRN.is_active = function()
