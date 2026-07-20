@@ -102,7 +102,10 @@ MPAPI.on_loaded(function()
 	-- update loop (see SPDRN._check_run_lost) and show our Restart/Forfeit screen.
 	-- Also polls for a pending run-start/restart request (see SPDRN.request_run_transition
 	-- in ui/lobby/run_start.lua) -- this runs after the frame's own EventManager:update()
-	-- has already returned, which is why it's the safe place to perform it.
+	-- has already returned, which is why it's the safe place to perform it. Same reasoning
+	-- for the deferred starting-money override (Seed Scout's scouting budget) and Seed
+	-- Scout's own wall-clock scouting-phase timer (defined in objects/gamemodes/seed_scout.lua,
+	-- not shared code -- it only inspects Seed-Scout-specific instance state).
 	if not SPDRN._game_over_hooked then
 		SPDRN._game_over_hooked = true
 		local _spdrn_update_ref = Game.update
@@ -110,6 +113,8 @@ MPAPI.on_loaded(function()
 			_spdrn_update_ref(self, dt)
 			pcall(SPDRN._check_run_lost)
 			pcall(SPDRN._check_pending_run_transition)
+			pcall(SPDRN._check_pending_dollars_override)
+			pcall(SPDRN._check_seed_scout_timer)
 		end
 	end
 

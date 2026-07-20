@@ -1,0 +1,158 @@
+-- How long the scouting phase lasts (seconds) before the real timed race begins. Kept as a
+-- module-level var (not a magic number in _check_seed_scout_timer) so it's easy to temporarily
+-- shorten for local iteration/testing without hunting through the file.
+SPDRN.SEED_SCOUT_DURATION = 300
+
+MPAPI.GameMode({
+	key = SPDRN.Gamemode.SEED_SCOUT,
+	display_name = 'Seed Scout',
+	max_players = {
+		public = 16,
+		private = 16,
+	},
+	-- The whole mechanic is committing to and mastering one specific seed -- re-rolling mid-
+	-- format would undermine that, same rationale as White Stake Triple's seed lock.
+	seed_change_allowed = false,
+	-- Up-front single deck pick, same as Gold Stake Single.
+	ban_pick = { pool_size = 5, keep = 1 },
+	-- Drives the lobby controls dispatcher (ui/lobby/controls.lua) to also show a "Choose
+	-- Stake" button alongside the deck panel -- the only mode that needs a host-picked stake.
+	picks_stake = true,
+	init = function(self)
+		-- 'scout' (5-minute $500 free-play window on the match's seed/deck/stake, thrown away)
+		-- -> 'race' (the real timed run, regular money, same seed/deck/stake).
+		self._phase = 'scout'
+		self._scout_locked = false
+		self._scout_deck = nil
+		self._scout_seed = nil
+		self._scout_stake = nil
+		self._scout_started_at = nil
+		self._scout_restart_pending = false
+		self._win_fired = false
+		self._forfeited = {}
+	end,
+	-- Win detection only runs once the real race has begun -- a freak fast scouting-phase
+	-- clear (unlikely in 5 minutes, but not impossible) must never end the match early.
+	calculate = function(self, context)
+		if self._phase ~= 'race' then
+			return
+		end
+		if not context.ante_change then
+			return
+		end
+		local ante = context.ante
+		if ante < 9 then
+			self._win_fired = false
+			return
+		end
+		if self._win_fired then
+			return
+		end
+		self._win_fired = true
+
+		local lobby = MPAPI.get_current_lobby()
+		if not lobby then
+			return
+		end
+		return { winner = lobby.player_id }
+	end,
+	on_player_forfeit = function(self, player_id)
+		local winner_id = self:check_single_survivor(player_id)
+		if not winner_id then
+			return
+		end
+		return { winner = winner_id }
+	end,
+	-- Dying during scouting doesn't matter (everything is thrown away anyway) -- silently
+	-- restart a fresh scout attempt instead of showing the normal Restart/Forfeit lose screen.
+	-- A 'race'-phase death falls through to that normal screen unchanged (return false).
+	on_run_lost = function(self)
+		if self._phase ~= 'scout' then
+			return false
+		end
+		if not self._scout_restart_pending then
+			self._scout_restart_pending = true
+			SPDRN.request_run_transition(self, self._scout_deck, self._scout_seed)
+		end
+		return true
+	end,
+	start_run = function(self, deck_name, seed)
+		self._scout_restart_pending = false
+		-- Multi-run-style progression (scout restarts, and the scout->race transition) reaches
+		-- start_run directly (not via safe_start_run), so tear down here too, same as White
+		-- Stake Triple/Stake Climb/All Deck.
+		SPDRN.teardown_existing_run()
+
+		-- Lock in the deck/seed/stake on the very first call (the initial scout start) and
+		-- reuse them for every subsequent call (scout-death restarts, the scout->race
+		-- transition) -- self._meta_stake (from lobby metadata, via the Choose Stake picker) is
+		-- only meaningful here, at match start, not on later calls.
+		if not self._scout_locked then
+			self._scout_locked = true
+			self._scout_deck = deck_name
+			self._scout_seed = seed
+			self._scout_stake = self._meta_stake or 1
+		end
+
+		local key = SPDRN.resolve_back_key(self._scout_deck)
+		if G.GAME and key and G.P_CENTERS[key] then
+			G.GAME.viewed_back = G.P_CENTERS[key]
+		end
+
+		if self._phase == 'scout' then
+			-- Anchor the countdown once (survives scout-death restarts -- dying doesn't buy
+			-- more scouting time). SPDRN._check_seed_scout_timer (polled from core.lua) is what
+			-- actually advances the phase once this elapses.
+			self._scout_started_at = self._scout_started_at or love.timer.getTime()
+			SPDRN._pending_dollars_override = 500
+		end
+		-- 'race'-phase calls (the scout->race transition) intentionally do NOT set a dollars
+		-- override -- regular starting money, per the mechanic's own design.
+
+		G.FUNCS.start_run(nil, {
+			stake = self._scout_stake,
+			seed = self._scout_seed,
+		})
+	end,
+})
+
+-- Polled every frame from core.lua's Game:update hook. Advances a Seed Scout match from the
+-- scouting phase to the real race once SPDRN.SEED_SCOUT_DURATION has elapsed. Wall-clock driven
+-- (not ante/context driven, unlike every other gamemode hook) since there is no engine event
+-- for "N seconds have passed" -- this is why it needs its own poll rather than reacting to
+-- MPAPI.calculate_context like calculate() does.
+function SPDRN._check_seed_scout_timer()
+	if not (MPAPI.is_active(SPDRN.id) and MPAPI.get_current_lobby()) then
+		return
+	end
+	local lobby = MPAPI.get_current_lobby()
+	local meta = lobby:get_metadata() or {}
+	if meta.gamemode ~= SPDRN.Gamemode.SEED_SCOUT then
+		return
+	end
+	local instance = lobby:get_gamemode_instance()
+	if not instance or instance._phase ~= 'scout' or not instance._scout_started_at then
+		return
+	end
+	-- Mirrors SPDRN.timer._tick's own "only once actually in the run" guard -- don't fire while
+	-- still mid blind-select/menu transition.
+	if not (G.GAME and G.STAGE == G.STAGES.RUN) then
+		return
+	end
+	if love.timer.getTime() - instance._scout_started_at < SPDRN.SEED_SCOUT_DURATION then
+		return
+	end
+
+	-- Setting _phase = 'race' here (synchronously, before the actual restart happens) is itself
+	-- the re-entry guard: the very next poll sees _phase ~= 'scout' and returns immediately.
+	instance._phase = 'race'
+	-- The OFFICIAL displayed speedrun clock only counts the real race, not the scouting phase --
+	-- reset it exactly like a fresh begin_run would, then let request_run_transition (not
+	-- another queued Event -- see its own comment in ui/lobby/run_start.lua for why) perform
+	-- the actual restart on the next tick, outside this poll's own call stack.
+	SPDRN._run_started_at = love.timer.getTime()
+	if SPDRN.timer then
+		SPDRN.timer.start()
+	end
+	SPDRN.request_run_transition(instance, instance._scout_deck, instance._scout_seed)
+end

@@ -207,6 +207,14 @@ function SPDRN._check_run_lost()
 	if SPDRN._run_lost_shown then
 		return
 	end
+	-- A gamemode instance can suppress the default lose screen and handle the loss itself (e.g.
+	-- Seed Scout silently restarting a scouting-phase death instead of showing Restart/Forfeit).
+	-- Undefined on every existing gamemode, so this is a no-op for them.
+	local lobby = MPAPI.get_current_lobby()
+	local instance = lobby and lobby:get_gamemode_instance()
+	if instance and instance.on_run_lost and instance:on_run_lost() then
+		return
+	end
 	SPDRN._run_lost_shown = true
 	SPDRN.show_run_lost_screen()
 end

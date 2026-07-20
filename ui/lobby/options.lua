@@ -41,6 +41,62 @@ G.FUNCS.spdrn_lobby_options = function()
 				}),
 			},
 		}
+		contents[#contents + 1] = {
+			n = G.UIT.R,
+			config = { align = 'cm', padding = 0.05 },
+			nodes = {
+				UIBox_button({
+					button = 'spdrn_change_seed_scout',
+					label = { 'Seed Scout' .. (current_key == SPDRN.Gamemode.SEED_SCOUT and ' *' or '') },
+					colour = current_key == SPDRN.Gamemode.SEED_SCOUT and G.C.GREEN or G.C.GREY,
+					minw = 4,
+					minh = 0.6,
+					scale = 0.45,
+				}),
+			},
+		}
+		contents[#contents + 1] = {
+			n = G.UIT.R,
+			config = { align = 'cm', padding = 0.05 },
+			nodes = {
+				UIBox_button({
+					button = 'spdrn_change_challenge',
+					label = { 'Challenge' .. (current_key == SPDRN.Gamemode.CHALLENGE and ' *' or '') },
+					colour = current_key == SPDRN.Gamemode.CHALLENGE and G.C.GREEN or G.C.GREY,
+					minw = 4,
+					minh = 0.6,
+					scale = 0.45,
+				}),
+			},
+		}
+		contents[#contents + 1] = {
+			n = G.UIT.R,
+			config = { align = 'cm', padding = 0.05 },
+			nodes = {
+				UIBox_button({
+					button = 'spdrn_change_all_deck',
+					label = { 'All Deck' .. (current_key == SPDRN.Gamemode.ALL_DECK and ' *' or '') },
+					colour = current_key == SPDRN.Gamemode.ALL_DECK and G.C.GREEN or G.C.GREY,
+					minw = 4,
+					minh = 0.6,
+					scale = 0.45,
+				}),
+			},
+		}
+		contents[#contents + 1] = {
+			n = G.UIT.R,
+			config = { align = 'cm', padding = 0.05 },
+			nodes = {
+				UIBox_button({
+					button = 'spdrn_change_stake_climb',
+					label = { 'Stake Climb' .. (current_key == SPDRN.Gamemode.STAKE_CLIMB and ' *' or '') },
+					colour = current_key == SPDRN.Gamemode.STAKE_CLIMB and G.C.GREEN or G.C.GREY,
+					minw = 4,
+					minh = 0.6,
+					scale = 0.45,
+				}),
+			},
+		}
 		contents[#contents + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
 			{ n = G.UIT.T, config = { text = 'Change Ruleset', scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
 		} }
@@ -88,7 +144,11 @@ local function change_gamemode(key)
 		local need = SPDRN.required_deck_count(MPAPI.GameModes[key])
 		local have = type(meta.deck) == 'table' and #meta.deck or 1
 		local deck = (have == need and meta.deck) or SPDRN.Deck.DEFAULT
-		lobby:set_metadata({ gamemode = key, deck = deck, ruleset = meta.ruleset or SPDRN.Ruleset.ORDER })
+		-- stake/challenge are preserved across a switch (harmless for modes that don't use
+		-- them) so a host who already picked one doesn't lose it if they switch back to a mode
+		-- that does -- stake falls back to White (1) since every mode's metadata already
+		-- carries some value for it (see create_lobby_with_gamemode's universal default).
+		lobby:set_metadata({ gamemode = key, deck = deck, ruleset = meta.ruleset or SPDRN.Ruleset.ORDER, stake = meta.stake or 1, challenge = meta.challenge })
 	end
 	G.FUNCS.exit_overlay_menu()
 end
@@ -99,6 +159,22 @@ end
 
 G.FUNCS.spdrn_change_gold_stake_single = function()
 	change_gamemode(SPDRN.Gamemode.GOLD_STAKE_SINGLE)
+end
+
+G.FUNCS.spdrn_change_seed_scout = function()
+	change_gamemode(SPDRN.Gamemode.SEED_SCOUT)
+end
+
+G.FUNCS.spdrn_change_challenge = function()
+	change_gamemode(SPDRN.Gamemode.CHALLENGE)
+end
+
+G.FUNCS.spdrn_change_all_deck = function()
+	change_gamemode(SPDRN.Gamemode.ALL_DECK)
+end
+
+G.FUNCS.spdrn_change_stake_climb = function()
+	change_gamemode(SPDRN.Gamemode.STAKE_CLIMB)
 end
 
 local function change_ruleset(key)

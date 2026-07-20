@@ -54,6 +54,36 @@ local function safe_start_run(instance, deck, seed)
 	SPDRN.request_run_transition(instance, deck, seed)
 end
 
+-- Deferred starting-money override (Seed Scout's $500 scouting budget). G.FUNCS.start_run has
+-- no `dollars` opt -- Game:start_run sets G.GAME.dollars = G.GAME.starting_params.dollars
+-- synchronously inside its own queued Event, so any override has to happen strictly after that,
+-- not be passed in up front. Level-triggered (polls every frame until the new run is actually
+-- ready) rather than a fixed tick count, since start_run's own delete_run/start_run Event pair
+-- doesn't guarantee a specific number of frames before the run is actually live.
+--
+-- Waits for G.STATE == G.STATES.BLIND_SELECT specifically (the same signal SPDRN.begin_run's
+-- own wait condition already uses as "a run has actually started") -- NOT G.STAGE ==
+-- G.STAGES.RUN. A same-stage restart (e.g. Seed Scout's scout-death auto-restart) never leaves
+-- the RUN stage at all, so checking G.STAGE alone fires immediately on the OLD (dying) run's
+-- still-current G.GAME, before delete_run/start_run's queued events even replace it with the
+-- fresh object -- the override lands on a G.GAME that's about to be discarded, so it never
+-- actually sticks. G.STATE, by contrast, genuinely leaves BLIND_SELECT (goes to GAME_OVER) on
+-- death and only returns to it once the NEW run's setup has fully completed.
+SPDRN._pending_dollars_override = nil
+
+function SPDRN._check_pending_dollars_override()
+	local amount = SPDRN._pending_dollars_override
+	if not amount then
+		return
+	end
+	if not (G.GAME and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil) then
+		return
+	end
+	SPDRN._pending_dollars_override = nil
+	G.GAME.dollars = amount
+	G.GAME.starting_params.dollars = amount
+end
+
 -- Instantiate the gamemode for the current lobby and start the Balatro run. Shared by the
 -- start_game action, practice, play-again, and seed-vote restart. `decks` is either a single
 -- deck ref (single-deck flow) or a list of deck refs from a ban-pick draft (one per run). A
@@ -87,6 +117,11 @@ function SPDRN.begin_run(gamemode_key, decks, seed)
 	-- so every client lands on the same sequence (see SPDRN.derive_seed). All clients receive the
 	-- same broadcast `seed`, so this is identical across the lobby.
 	instance._base_seed = seed
+	-- Optional per-lobby-metadata fields a gamemode may need at run-start time (Challenge's
+	-- picked challenge id, Seed Scout's picked stake) -- unused by every other gamemode.
+	local meta = lobby:get_metadata() or {}
+	instance._meta_challenge = meta.challenge
+	instance._meta_stake = tonumber(meta.stake)
 	lobby._gamemode_instance = instance
 	safe_start_run(instance, deck_list[1], seed)
 end

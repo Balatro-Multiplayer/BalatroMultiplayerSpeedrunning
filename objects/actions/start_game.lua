@@ -30,23 +30,32 @@ MPAPI.ActionType({
 
 		if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
 			proceed(meta.deck)
-		elseif gm_def.ban_pick and SPDRN.is_matchmaking() then
-			-- Matchmaking (always 2 players): run the deck draft, then the synced
-			-- countdown on the surviving decks. Every client runs this off the same
-			-- broadcast, so the draft stays in lockstep. The draft renders inline in the
-			-- matchmaking lobby controls (see build_matchmaking_controls).
+		elseif gm_def.ban_pick and (SPDRN.is_matchmaking() or gm_def.always_draft) then
+			-- Matchmaking (always 2 players), or any lobby kind for a gamemode that opts into
+			-- always drafting (e.g. All Deck, which needs its draft to decide play order in
+			-- private lobbies too, not just matchmaking): run the deck draft, then the synced
+			-- countdown on the result. Every client runs this off the same broadcast, so the
+			-- draft stays in lockstep. The draft renders inline in the matchmaking lobby
+			-- controls (see build_matchmaking_controls) for matchmaking; private lobbies render
+			-- it the same way via SPDRN.lobby.build_controls's is_matchmaking() branch -- an
+			-- always_draft private lobby is treated as "matchmaking-shaped" for this one screen.
 			MPAPI.BanPick.start(lobby, {
 				pool_size = gm_def.ban_pick.pool_size,
 				keep = gm_def.ban_pick.keep,
+				build_pool = gm_def.ban_pick.build_pool,
 				state_action = 'spdrn_ban_pick_state',
 				ban_action = 'spdrn_ban_pick_ban',
 				on_refresh = function()
 					SPDRN.lobby.refresh_mm_status()
 				end,
-			}, function(survivors)
+			}, function(survivors, ban_order)
+				-- keep == 0 bans every pool item, so `survivors` is always empty -- the ban
+				-- ORDER is the intended result (e.g. All Deck's play order). Every other
+				-- gamemode's ban_pick has keep > 0, so this is a no-op for them.
+				local run_order = (gm_def.ban_pick.keep == 0) and ban_order or survivors
 				SPDRN.show_countdown(function()
-					proceed(survivors)
-				end, survivors)
+					proceed(run_order)
+				end, run_order)
 			end)
 		else
 			-- Private + matchmaking without a draft: synced 5s countdown, single deck.
