@@ -183,14 +183,23 @@ SPDRN.show_run_lost_screen = function()
 end
 
 -- Balatro has no single "you lost" callback, so we watch the game-over state off
--- the update loop. Fires once per loss, only inside a SPDRN lobby, and only for an
--- actual loss (G.GAME.won is set on a win, whose screen we drive separately).
+-- the update loop. Fires once per loss, only inside a SPDRN lobby.
+--
+-- Deliberately does NOT check `not G.GAME.won` here: end_round() sets G.GAME.won = true
+-- whenever ante >= win_ante and the boss blind is up, unconditionally -- it does not check
+-- whether the score requirement was actually met. So dying to the win-ante (8) boss blind
+-- also leaves G.GAME.won true, which used to make this look like a win and silently skip
+-- the lose screen. G.STATE == G.STATES.GAME_OVER is a reliable loss-only signal on its own:
+-- every G.STATE = G.STATES.GAME_OVER assignment in the game/SMODS/mod code (end_round's
+-- game_over branch, the two hand-limit-0 deck-out checks, and the DT_lose_game debug
+-- trigger) is a loss path -- a genuine win never sets it (win_game() shows its own overlay
+-- from ROUND_EVAL instead).
 function SPDRN._check_run_lost()
 	if not (MPAPI.is_active(SPDRN.id) and MPAPI.get_current_lobby()) then
 		SPDRN._run_lost_shown = false
 		return
 	end
-	local lost = G.STATE == G.STATES.GAME_OVER and not (G.GAME and G.GAME.won)
+	local lost = G.STATE == G.STATES.GAME_OVER
 	if not lost then
 		SPDRN._run_lost_shown = false
 		return
