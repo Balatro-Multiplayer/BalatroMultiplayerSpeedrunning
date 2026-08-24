@@ -44,6 +44,40 @@ SPDRN.load_spdrn_dir('domain', true)
 SPDRN.load_spdrn_dir('ui', true)
 
 MPAPI.on_loaded(function()
+	-- cleanup(self, uibox) runs against the OUTGOING page and may return (delay, on_enter) to
+	-- animate the transition -- see MPAPI.pages.show in BalatroMultiplayerAPI/api/page/manager.lua.
+	MPAPI.Page({
+		key = 'spdrn_main_menu',
+		category = 'mod_menu',
+		build = function(self)
+			return SPDRN.build_pre_lobby_ui()
+		end,
+		cleanup = function(self, uibox)
+			MPAPI.set_logo_offset(-2.5)
+			uibox.alignment.offset.x = -15
+			uibox.alignment.offset.y = 10
+			return 0.4, function(new_uibox)
+				new_uibox.VT.x = new_uibox.T.x + 15
+			end
+		end,
+	})
+
+	MPAPI.Page({
+		key = 'spdrn_lobby',
+		category = 'lobby_menu',
+		build = function(self)
+			return SPDRN.build_in_lobby_ui()
+		end,
+		cleanup = function(self, uibox)
+			uibox.alignment.offset.x = 15
+			uibox.alignment.offset.y = 10
+			return 0.4, function(new_uibox)
+				MPAPI.set_logo_offset(0)
+				new_uibox.VT.x = new_uibox.T.x - 15
+			end
+		end,
+	})
+
 	MPAPI.register_mod({
 		id = SPDRN.id,
 		name = 'Speedrun',
@@ -51,32 +85,8 @@ MPAPI.on_loaded(function()
 		prevent_pause = true,
 		options_builder = SPDRN.create_run_options,
 		title = { base = 'spdrn_speedrun_title_base', extra = 'spdrn_speedrun_title_extra' },
-
-		-- { builder, cleanup } pair. The cleanup animates the current UIBox out
-		-- and returns (delay, on_enter) for the incoming UIBox.
-		main_menu_ui = {
-			SPDRN.build_pre_lobby_ui,
-			function(uibox)
-				MPAPI.set_logo_offset(-2.5)
-				uibox.alignment.offset.x = -15
-				uibox.alignment.offset.y = 10
-				return 0.4, function(new_uibox)
-					new_uibox.VT.x = new_uibox.T.x + 15
-				end
-			end,
-		},
-
-		lobby_ui = {
-			SPDRN.build_in_lobby_ui,
-			function(uibox)
-				uibox.alignment.offset.x = 15
-				uibox.alignment.offset.y = 10
-				return 0.4, function(new_uibox)
-					MPAPI.set_logo_offset(0)
-					new_uibox.VT.x = new_uibox.T.x - 15
-				end
-			end,
-		},
+		main_menu_ui = 'spdrn_main_menu',
+		lobby_ui = 'spdrn_lobby',
 	})
 
 	MPAPI.on_connection_state_change(function()
