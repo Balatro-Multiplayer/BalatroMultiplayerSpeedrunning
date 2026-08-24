@@ -4,6 +4,7 @@ SPDRN.setup_lobby_events = function(lobby)
 	L.ui_ref = MPAPI.create_lobby_ui(lobby)
 	L.ready:reset()
 	L.seed_votes:reset()
+	L.draw_votes:reset()
 	L.local_ready = false
 	L.start_broadcasted = false
 	-- One-shot guard for the guest's ready re-announce (see player_ready action).
@@ -30,6 +31,7 @@ SPDRN.setup_lobby_events = function(lobby)
 		-- vote whenever membership changes (an "unanimous" bar computed against
 		-- the old roster would otherwise misfire once someone leaves).
 		L.seed_votes:reset()
+		L.draw_votes:reset()
 		update_game_buttons()
 	end)
 
@@ -39,6 +41,7 @@ SPDRN.setup_lobby_events = function(lobby)
 		-- unanimous vote from before the drop shouldn't fire again the instant
 		-- the reconnecting player's own client re-syncs.
 		L.seed_votes:reset()
+		L.draw_votes:reset()
 	end)
 
 	lobby:on('connected', function()
@@ -74,6 +77,7 @@ SPDRN.setup_lobby_events = function(lobby)
 		L.buttons_initialized = false
 		L.ready:reset()
 		L.seed_votes:reset()
+		L.draw_votes:reset()
 		L.local_ready = false
 		L.start_broadcasted = false
 		SPDRN._lobby_kind = nil

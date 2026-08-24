@@ -14,6 +14,16 @@ G.FUNCS.spdrn_seed_change = function()
 	end
 end
 
+-- Practice is solo: nobody to draw with, so the button (when shown at all) is a
+-- no-op -- unlike seed change/forfeit, a draw has no sensible single-player meaning.
+G.FUNCS.spdrn_draw_vote = function()
+	G.FUNCS.exit_overlay_menu()
+	if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
+		return
+	end
+	SPDRN.cast_draw_vote()
+end
+
 G.FUNCS.spdrn_forfeit = function()
 	G.FUNCS.exit_overlay_menu()
 	-- Practice is solo: forfeiting just ends the run, so show the game-over screen
@@ -56,6 +66,18 @@ SPDRN.create_run_options = function()
 		add_row(UIBox_button({
 			button = 'spdrn_seed_change',
 			label = { 'Seed Change' },
+			colour = G.C.BLUE,
+			minw = 5,
+		}))
+	end
+
+	-- Unanimous lobby vote to end the match as a draw, same "no restriction, no
+	-- time window" gating as Seed Change above -- hidden entirely when the
+	-- gamemode sets draw_vote_allowed = false.
+	if not gm or gm.draw_vote_allowed ~= false then
+		add_row(UIBox_button({
+			button = 'spdrn_draw_vote',
+			label = { localize('k_draw_vote') },
 			colour = G.C.BLUE,
 			minw = 5,
 		}))

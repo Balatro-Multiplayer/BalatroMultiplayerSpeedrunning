@@ -79,11 +79,14 @@ function SPDRN._maybe_report_result(winner_id)
 	end)
 end
 
--- Called once, when this client's own match involvement ends (it won, or it
--- personally forfeited, per objects/actions/player_won.lua's receive handler):
--- finalizes and broadcasts its own progress, then checks whether every player
--- has now reported.
-function SPDRN.report_match_result(winner_id)
+-- Called once, when this client's own match involvement ends (it won, it
+-- personally forfeited, or a draw vote resolved -- see objects/actions/player_won.lua
+-- and objects/actions/match_draw.lua's receive handlers): finalizes and broadcasts
+-- its own progress, then checks whether every player has now reported.
+-- `opts.draw` (a unanimous draw vote, objects/actions/match_draw.lua) skips the
+-- MMR round-trip below -- a drawn match has no winner to rate.
+function SPDRN.report_match_result(winner_id, opts)
+	opts = opts or {}
 	SPDRN._current_winner_id = winner_id
 	SPDRN._match_result_pending = true
 
@@ -95,12 +98,13 @@ function SPDRN.report_match_result(winner_id)
 	local progress = SPDRN.finalize_match_progress()
 	-- Closes this MATCH's RLOG block (end_run is now once-per-match, see
 	-- ui/lobby/run_start.lua's begin_run) -- this is this client's own
-	-- match-ending event (it won, lost to someone else winning, or hit the
-	-- duration-cap timeout with no single winner). Idempotent (end_run
-	-- no-ops once already closed), so harmless if objects/actions/forfeit.lua's
-	-- own end_run already closed the block first for a terminal forfeit.
+	-- match-ending event (it won, lost to someone else winning, hit the
+	-- duration-cap timeout with no single winner, or a draw vote resolved).
+	-- Idempotent (end_run no-ops once already closed), so harmless if
+	-- objects/actions/forfeit.lua's own end_run already closed the block
+	-- first for a terminal forfeit.
 	MPAPI.replay.end_run({
-		result = winner_id == nil and 'timeout' or (winner_id == lobby.player_id and 'win' or 'loss'),
+		result = opts.draw and 'draw' or (winner_id == nil and 'timeout' or (winner_id == lobby.player_id and 'win' or 'loss')),
 	})
 	-- §16.10/17: jokers/deck_back/deck ride along for the win/lose screen's
 	-- per-player jokers+deck viewer only -- build_placements (above)
@@ -132,5 +136,7 @@ function SPDRN.report_match_result(winner_id)
 		best_hand_amt = progress.best_hand_amt,
 	})
 
-	SPDRN._maybe_report_result(winner_id)
+	if not opts.draw then
+		SPDRN._maybe_report_result(winner_id)
+	end
 end

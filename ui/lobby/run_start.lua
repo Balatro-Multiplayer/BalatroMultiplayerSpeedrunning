@@ -118,6 +118,7 @@ function SPDRN.begin_run(gamemode_key, decks, seed)
 	-- broadcast needed), so returning to the lobby requires re-readying.
 	SPDRN.reset_ready_state()
 	SPDRN.lobby.seed_votes:reset()
+	SPDRN.lobby.draw_votes:reset()
 	-- §16.8: fresh per-match progress/result-collection state -- must not carry
 	-- over from whatever match (if any) this player was previously in.
 	SPDRN.reset_match_progress()
@@ -186,6 +187,7 @@ function SPDRN.restart_current_run()
 	local deck = (instance._run_decks and instance._run_decks[run_idx])
 		or SPDRN._run_deck or meta_deck_for_run or SPDRN.Deck.DEFAULT
 	SPDRN.lobby.seed_votes:reset()
+	SPDRN.lobby.draw_votes:reset()
 	-- Don't reset SPDRN._run_started_at: a restart continues the same run clock, matching
 	-- multi-run progression. resume() keeps the timer active without zeroing it (and is a safe
 	-- no-op since the run-lost screen no longer freezes the clock).

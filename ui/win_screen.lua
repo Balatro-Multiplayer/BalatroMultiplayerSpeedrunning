@@ -28,3 +28,29 @@ SPDRN.show_win_screen = function()
 		body = SPDRN.win_body,
 	})
 end
+
+-- The speedrun draw screen's body: same shared MPAPI.end_screen_body as win_body,
+-- with the loser's button set (SPDRN.end_screen_buttons(false)) -- a draw ends the
+-- match the same as an opponent-won loss (no restart buttons), it just isn't a win.
+function SPDRN.draw_body()
+	local player_panel = SPDRN.build_end_game_extras()
+	return MPAPI.end_screen_body({
+		player_panel = player_panel,
+		stat_rows = SPDRN.build_end_game_stat_rows(SPDRN._end_screen_selected_player_id),
+		buttons = SPDRN.end_screen_buttons(false),
+	})
+end
+
+SPDRN.show_draw_screen = function()
+	if SPDRN.timer then
+		SPDRN.timer.stop()
+	end
+	MPAPI.end_screen_show({
+		draw = true,
+		won = false,
+		id = 'spdrn_draw_UI',
+		sounds = 'win',
+		quip = { prefix = 'wq_', max = 7 },
+		body = SPDRN.draw_body,
+	})
+end

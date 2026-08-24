@@ -12,6 +12,7 @@ local L = SPDRN.lobby
 L.buttons = L.buttons or {}
 L.ready = L.ready or MPAPI.ReadyTracker()
 L.seed_votes = L.seed_votes or MPAPI.VoteTracker()
+L.draw_votes = L.draw_votes or MPAPI.VoteTracker()
 if L.local_ready == nil then
 	L.local_ready = false
 end
