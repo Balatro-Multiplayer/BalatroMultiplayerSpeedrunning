@@ -78,6 +78,18 @@ MPAPI.on_loaded(function()
 		end,
 	})
 
+	-- Shared "choose a gamemode" page (ui/main_menu/game_select.lua), styled after Balatro's own
+	-- Blind Select pillars. Find Game/Practice/Create Lobby all navigate here now instead of
+	-- each opening their own overlay; self.params.intent (set by MPAPI.pages.show's caller)
+	-- picks which action a pillar click takes.
+	MPAPI.Page({
+		key = 'spdrn_game_select',
+		category = 'game_select',
+		build = function(self)
+			return SPDRN.build_game_select_ui(self.params and self.params.intent)
+		end,
+	})
+
 	MPAPI.register_mod({
 		id = SPDRN.id,
 		name = 'Speedrun',

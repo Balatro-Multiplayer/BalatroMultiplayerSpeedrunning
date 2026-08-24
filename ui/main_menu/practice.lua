@@ -30,51 +30,7 @@ function SPDRN._start_practice(gamemode_key, decks, extra_meta)
 end
 
 G.FUNCS.spdrn_practice = function()
-	G.FUNCS.overlay_menu({
-		definition = create_UIBox_generic_options({
-			contents = {
-				{ n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
-					{ n = G.UIT.T, config = { text = 'Practice', scale = 0.6, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
-				} },
-				{
-					n = G.UIT.R,
-					config = { align = 'cm', padding = 0.1 },
-					nodes = {
-						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
-							UIBox_button({ button = 'spdrn_practice_white', label = { 'White Stake', 'Triple' }, colour = G.C.ETERNAL, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
-						} },
-						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
-							UIBox_button({ button = 'spdrn_practice_gold', label = { 'Gold Stake', 'Single' }, colour = G.C.GOLD, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
-						} },
-					},
-				},
-				{
-					n = G.UIT.R,
-					config = { align = 'cm', padding = 0.1 },
-					nodes = {
-						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
-							UIBox_button({ button = 'spdrn_practice_seed_scout', label = { 'Seed', 'Scout' }, colour = G.C.BLUE, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
-						} },
-						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
-							UIBox_button({ button = 'spdrn_practice_challenge', label = { 'Challenge' }, colour = G.C.RED, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
-						} },
-					},
-				},
-				{
-					n = G.UIT.R,
-					config = { align = 'cm', padding = 0.1 },
-					nodes = {
-						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
-							UIBox_button({ button = 'spdrn_practice_all_deck', label = { 'All', 'Deck' }, colour = G.C.PURPLE, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
-						} },
-						{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
-							UIBox_button({ button = 'spdrn_practice_stake_climb', label = { 'Stake', 'Climb' }, colour = G.C.GREEN, minw = 2.5, minh = 2.0, scale = 0.5, col = true }),
-						} },
-					},
-				},
-			},
-		}),
-	})
+	MPAPI.pages.show('spdrn_game_select', { intent = 'practice' })
 end
 
 G.FUNCS.spdrn_practice_white = function()
