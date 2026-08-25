@@ -32,29 +32,44 @@ local CHIP_ROW = {
 	challenge = 7,
 }
 
--- Shown in every pillar's description plate, regardless of intent.
+-- The name plate's background/border colour, per chip row -- sampled from each chip icon's own
+-- two dominant colours (circle fill + symbol) rather than a colour picked by hand, so the plate
+-- always matches the art. bg is darkened for the plate's own background (keeps white plate text
+-- legible); icon is used undarkened for the border.
+local CHIP_COLOURS = {
+	[CHIP_ROW.all_deck] = { bg = HEX('83E9F8'), icon = HEX('5AABDC') },
+	[CHIP_ROW.stake_climb] = { bg = HEX('FD5F55'), icon = HEX('C14139') },
+	[CHIP_ROW.white_stake_triple] = { bg = HEX('DCDCDC'), icon = HEX('4F6367') },
+	[CHIP_ROW.white_stake_triple_ranked] = { bg = HEX('DCDCDC'), icon = HEX('F5A600') },
+	[CHIP_ROW.gold_stake_single] = { bg = HEX('FDCF51'), icon = HEX('C88000') },
+	[CHIP_ROW.gold_stake_single_ranked] = { bg = HEX('FDCF51'), icon = HEX('935ADC') },
+	[CHIP_ROW.seed_scout] = { bg = HEX('74CCA8'), icon = HEX('459373') },
+	[CHIP_ROW.challenge] = { bg = HEX('9E4D6E'), icon = HEX('DCDCDC') },
+}
+
+-- Shown in every pillar's description plate, regardless of intent. Always two lines.
 local DESCRIPTION = {
-	[SPDRN.Gamemode.WHITE_STAKE_TRIPLE] = 'White Stake. Three Runs.',
-	[SPDRN.Gamemode.GOLD_STAKE_SINGLE] = 'Gold Stake. One Run.',
-	[SPDRN.Gamemode.SEED_SCOUT] = '60 Seconds to Scout.',
-	[SPDRN.Gamemode.CHALLENGE] = 'Challenge Deck.',
-	[SPDRN.Gamemode.ALL_DECK] = '15 Runs.',
-	[SPDRN.Gamemode.STAKE_CLIMB] = 'Every Stake in Order.',
+	[SPDRN.Gamemode.WHITE_STAKE_TRIPLE] = { 'White Stake.', 'Three Runs.' },
+	[SPDRN.Gamemode.GOLD_STAKE_SINGLE] = { 'Gold Stake.', 'One Run.' },
+	[SPDRN.Gamemode.SEED_SCOUT] = { '60 Seconds', 'to Scout.' },
+	[SPDRN.Gamemode.CHALLENGE] = { 'Challenge', 'Deck.' },
+	[SPDRN.Gamemode.ALL_DECK] = { '15', 'Runs.' },
+	[SPDRN.Gamemode.STAKE_CLIMB] = { 'Every Stake', 'in Order.' },
 }
 
 -- Practice and Create Lobby show all six gamemodes as plain pillars.
 local PRACTICE_LOBBY_MODES = {
-	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = 'White Stake Triple', colour = G.C.ETERNAL, chip_row = CHIP_ROW.white_stake_triple,
+	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
 		practice_button = 'spdrn_practice_white', lobby_button = 'spdrn_select_white_stake_triple' },
-	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = 'Gold Stake Single', colour = G.C.GOLD, chip_row = CHIP_ROW.gold_stake_single,
+	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single' }, chip_row = CHIP_ROW.gold_stake_single,
 		practice_button = 'spdrn_practice_gold', lobby_button = 'spdrn_select_gold_stake_single' },
-	{ key = SPDRN.Gamemode.SEED_SCOUT, name = 'Seed Scout', colour = G.C.BLUE, chip_row = CHIP_ROW.seed_scout,
+	{ key = SPDRN.Gamemode.SEED_SCOUT, name = 'Seed Scout', chip_row = CHIP_ROW.seed_scout,
 		practice_button = 'spdrn_practice_seed_scout', lobby_button = 'spdrn_select_seed_scout' },
-	{ key = SPDRN.Gamemode.CHALLENGE, name = 'Challenge', colour = G.C.RED, chip_row = CHIP_ROW.challenge,
+	{ key = SPDRN.Gamemode.CHALLENGE, name = 'Challenge', chip_row = CHIP_ROW.challenge,
 		practice_button = 'spdrn_practice_challenge', lobby_button = 'spdrn_select_challenge' },
-	{ key = SPDRN.Gamemode.ALL_DECK, name = 'All Deck', colour = G.C.PURPLE, chip_row = CHIP_ROW.all_deck,
+	{ key = SPDRN.Gamemode.ALL_DECK, name = 'All Deck', chip_row = CHIP_ROW.all_deck,
 		practice_button = 'spdrn_practice_all_deck', lobby_button = 'spdrn_select_all_deck' },
-	{ key = SPDRN.Gamemode.STAKE_CLIMB, name = 'Stake Climb', colour = G.C.GREEN, chip_row = CHIP_ROW.stake_climb,
+	{ key = SPDRN.Gamemode.STAKE_CLIMB, name = 'Stake Climb', chip_row = CHIP_ROW.stake_climb,
 		practice_button = 'spdrn_practice_stake_climb', lobby_button = 'spdrn_select_stake_climb' },
 }
 
@@ -62,13 +77,13 @@ local PRACTICE_LOBBY_MODES = {
 -- the old Find Game overlay's Ranked x Casual x White x Gold matrix, just as 4 pillars instead
 -- of a 2x2 grid of stat buttons.
 local FIND_GAME_MODES = {
-	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = 'White Stake Triple', colour = G.C.ETERNAL, chip_row = CHIP_ROW.white_stake_triple,
+	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
 		ranked = false, game_mode_stat_key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_game_select_queue_white_stake_triple' },
-	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = 'White Stake Triple Ranked', colour = G.C.ETERNAL, chip_row = CHIP_ROW.white_stake_triple_ranked,
+	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple Ranked' }, chip_row = CHIP_ROW.white_stake_triple_ranked,
 		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_queue_ranked_white' },
-	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = 'Gold Stake Single', colour = G.C.GOLD, chip_row = CHIP_ROW.gold_stake_single,
+	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single' }, chip_row = CHIP_ROW.gold_stake_single,
 		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_game_select_queue_gold_stake_single' },
-	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = 'Gold Stake Single Ranked', colour = G.C.GOLD, chip_row = CHIP_ROW.gold_stake_single_ranked,
+	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single Ranked' }, chip_row = CHIP_ROW.gold_stake_single_ranked,
 		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_queue_ranked_gold' },
 }
 
@@ -124,6 +139,14 @@ local function build_chip_sprite(row, tracker)
 		{ shader = 'dissolve', shadow_height = 0.05 },
 		{ shader = 'dissolve' },
 	})
+	-- Node/Moveable default every object to collide.can = false (engine/node.lua) -- hover.can
+	-- and drag.can already default true, but without collide the object is never hit-tested, so
+	-- neither ever actually triggers. Real blind-select chips get this via their own G.UIT.O
+	-- node's can_collide config; setting it directly on the sprite here has the same effect and
+	-- doesn't depend on that node-level propagation.
+	spr.states.collide.can = true
+	spr.states.hover.can = true
+	spr.states.drag.can = true
 	if tracker then
 		tracker[#tracker + 1] = spr
 	end
@@ -139,13 +162,15 @@ local function small_caption(text)
 	} }
 end
 
--- The upper description plate: what the gamemode is, and (find_game only) its time limit.
+-- The upper description plate: what the gamemode is (always two lines), and (find_game only)
+-- its time limit.
 local function build_description_box(mode, intent)
-	local nodes = {
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.T, config = { text = DESCRIPTION[mode.key] or '', scale = 0.32, colour = G.C.WHITE, shadow = true, maxw = 2.3 } },
-		} },
-	}
+	local nodes = {}
+	for _, line in ipairs(DESCRIPTION[mode.key] or {}) do
+		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = 'cm' }, nodes = {
+			{ n = G.UIT.T, config = { text = line, scale = 0.32, colour = G.C.WHITE, shadow = true, maxw = 2.3 } },
+		} }
+	end
 	if intent == 'find_game' then
 		local gm = MPAPI.GameModes[mode.key]
 		local minutes = gm and gm.duration_cap_seconds and math.floor(gm.duration_cap_seconds / 60)
@@ -212,9 +237,11 @@ local function build_find_game_stat_box(mode)
 		local in_match = counts and counts.inMatch or 0
 		return { nodes = { {
 			n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-				build_count_half('Queue', queued),
+				{ n = G.UIT.C, config = { minw = 0.15 }, nodes = {} },
+				build_count_half('In Queue', queued),
 				{ n = G.UIT.C, config = { minw = 0.1 }, nodes = {} },
 				build_count_half('In Game', in_match),
+				{ n = G.UIT.C, config = { minw = 0.15 }, nodes = {} },
 			},
 		} } }
 	end)
@@ -238,6 +265,26 @@ local function button_for(mode, intent)
 		return mode.queue_button
 	end
 	return mode.practice_button
+end
+
+-- mode.name is either a plain string (one line) or a {line1, line2} table (White/Gold +
+-- Ranked, whose names are too long for one line at this width). Coloured from the chip icon's
+-- own two dominant colours (CHIP_COLOURS) rather than a hand-picked colour.
+local function build_name_plate(mode)
+	local lines = type(mode.name) == 'table' and mode.name or { mode.name }
+	local text_nodes = {}
+	for _, line in ipairs(lines) do
+		text_nodes[#text_nodes + 1] = { n = G.UIT.R, config = { align = 'cm' }, nodes = {
+			{ n = G.UIT.T, config = { text = line, scale = 0.35, colour = G.C.WHITE, shadow = true, maxw = 2.2 } },
+		} }
+	end
+	local colours = CHIP_COLOURS[mode.chip_row] or { bg = G.C.BLACK, icon = G.C.WHITE }
+	return { n = G.UIT.R, config = { align = 'cm', padding = 0.06 }, nodes = {
+		{ n = G.UIT.R, config = {
+			align = 'cm', r = 0.1, outline = 1, outline_colour = colours.icon, colour = darken(colours.bg, 0.3),
+			minw = 2.3, emboss = 0.1, padding = 0.06, line_emboss = 1,
+		}, nodes = text_nodes },
+	} }
 end
 
 local function build_pillar(mode, intent, sprite_tracker)
@@ -269,14 +316,7 @@ local function build_pillar(mode, intent, sprite_tracker)
 						{ n = G.UIT.T, config = { text = 'SELECT', scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
 					} },
 				} },
-				{ n = G.UIT.R, config = { align = 'cm', padding = 0.06 }, nodes = {
-					{ n = G.UIT.R, config = {
-						align = 'cm', r = 0.1, outline = 1, outline_colour = mode.colour, colour = darken(mode.colour, 0.3),
-						minw = 2.3, emboss = 0.1, padding = 0.06, line_emboss = 1,
-					}, nodes = {
-						{ n = G.UIT.T, config = { text = mode.name, scale = 0.35, colour = G.C.WHITE, shadow = true, maxw = 2.2 } },
-					} },
-				} },
+				build_name_plate(mode),
 				{ n = G.UIT.R, config = { align = 'cm', padding = 0.05, minh = 1.1 }, nodes = {
 					{ n = G.UIT.O, config = { object = build_chip_sprite(mode.chip_row, sprite_tracker) } },
 				} },
@@ -305,11 +345,15 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 
 	return {
 		n = G.UIT.ROOT,
-		config = { align = 'cm', colour = G.C.CLEAR },
+		config = { align = 'tm', colour = G.C.CLEAR },
 		nodes = {
 			{ n = G.UIT.R, config = { align = 'cm', padding = 0.2 }, nodes = {
 				{ n = G.UIT.T, config = { text = 'Choose a Gamemode', scale = 0.55, colour = G.C.WHITE, shadow = true } },
 			} },
+			-- Pushes the pillar row down toward the bottom of the page without changing the
+			-- pillars' own height -- top-anchoring the ROOT (instead of centering it) makes this
+			-- spacer's size a direct, predictable control over how far down they sit.
+			{ n = G.UIT.R, config = { minh = 2.1 }, nodes = {} },
 			{ n = G.UIT.R, config = { align = 'cm', padding = 0.2 }, nodes = row },
 		},
 	}
