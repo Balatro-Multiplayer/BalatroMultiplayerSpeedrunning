@@ -86,7 +86,23 @@ MPAPI.on_loaded(function()
 		key = 'spdrn_game_select',
 		category = 'game_select',
 		build = function(self)
-			return SPDRN.build_game_select_ui(self.params and self.params.intent)
+			self._chip_sprites = {}
+			return SPDRN.build_game_select_ui(self.params and self.params.intent, self._chip_sprites)
+		end,
+		-- The find_game intent's pillars show live queue/in-game counts (ui/main_menu/game_select.lua);
+		-- the poller driving them starts/stops with this page's own show/leave lifecycle.
+		on_enter = function(self)
+			if self.params and self.params.intent == 'find_game' then
+				SPDRN.start_find_game_polling()
+			end
+		end,
+		-- Runs on every way of leaving this page, including going straight into a run
+		-- (MPAPI.pages.teardown, not just a normal page swap) -- see MPAPI.pages' own
+		-- _dispose_instance comment (api/page/manager.lua) for why that guarantee matters here:
+		-- the pillars' chip sprites need an explicit :remove() or they crash the next frame.
+		dispose = function(self)
+			SPDRN.dispose_game_select_sprites(self._chip_sprites)
+			SPDRN.stop_find_game_polling()
 		end,
 	})
 
