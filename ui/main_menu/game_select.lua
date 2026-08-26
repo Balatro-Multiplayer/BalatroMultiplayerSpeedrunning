@@ -75,14 +75,16 @@ local PRACTICE_LOBBY_MODES = {
 
 -- Find Game only offers the two matchmade gamemodes, each as a Casual/Ranked pair -- matching
 -- the old Find Game overlay's Ranked x Casual x White x Gold matrix, just as 4 pillars instead
--- of a 2x2 grid of stat buttons.
+-- of a 2x2 grid of stat buttons. Grouped by ranked-status (both Casual, then both Ranked), not
+-- by gamemode, so build_game_select_ui's ranked-transition spacer (below) lands in the right
+-- place -- keep any future addition to this list sorted the same way.
 local FIND_GAME_MODES = {
 	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
 		ranked = false, game_mode_stat_key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_game_select_queue_white_stake_triple' },
-	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple Ranked' }, chip_row = CHIP_ROW.white_stake_triple_ranked,
-		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_queue_ranked_white' },
 	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single' }, chip_row = CHIP_ROW.gold_stake_single,
 		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_game_select_queue_gold_stake_single' },
+	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple Ranked' }, chip_row = CHIP_ROW.white_stake_triple_ranked,
+		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_queue_ranked_white' },
 	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single Ranked' }, chip_row = CHIP_ROW.gold_stake_single_ranked,
 		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_queue_ranked_gold' },
 }
@@ -339,7 +341,15 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 	local modes = intent == 'find_game' and FIND_GAME_MODES or PRACTICE_LOBBY_MODES
 
 	local row = {}
+	local prev_ranked = nil
 	for _, mode in ipairs(modes) do
+		-- Extra gap between the Casual and Ranked groups (find_game only -- prev_ranked stays
+		-- nil for every practice/create_lobby mode, none of which set `ranked`, so this never
+		-- fires there).
+		if prev_ranked ~= nil and mode.ranked ~= prev_ranked then
+			row[#row + 1] = { n = G.UIT.C, config = { minw = 0.9 }, nodes = {} }
+		end
+		prev_ranked = mode.ranked
 		row[#row + 1] = build_pillar(mode, intent, sprite_tracker)
 	end
 
@@ -352,8 +362,12 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 			} },
 			-- Pushes the pillar row down toward the bottom of the page without changing the
 			-- pillars' own height -- top-anchoring the ROOT (instead of centering it) makes this
-			-- spacer's size a direct, predictable control over how far down they sit.
-			{ n = G.UIT.R, config = { minh = 2.1 }, nodes = {} },
+			-- spacer's size a direct, predictable control over how far down they sit. (A node's
+			-- own `offset` was tried instead of this spacer and rejected: it shifts the drawn
+			-- position without the parent's layout/anchor calculations accounting for the shift,
+			-- desyncing it from the page's own 'bmi' bottom-anchor and causing overlap with the
+			-- title logo above rather than moving the pillars down.)
+			{ n = G.UIT.R, config = { minh = 3.2 }, nodes = {} },
 			{ n = G.UIT.R, config = { align = 'cm', padding = 0.2 }, nodes = row },
 		},
 	}
