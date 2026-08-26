@@ -15,6 +15,18 @@ function SPDRN._join_queue(kind, gamemode_key)
 		return
 	end
 
+	-- No normal UI path reaches this while already mid-run (the in-run pause menu has no
+	-- Find Game button) -- this is defense-in-depth, not a fix for something reachable today.
+	-- Queueing while a run is live would let a real match's lobby_ready later interrupt this
+	-- run via focus.lua's on_lobby_connected (MPAPI.exit_to_menu(), which has no idea SPDRN
+	-- per-run state like Seed Scout's scouting-phase dollars override exists) -- the same class
+	-- of "abandoned run, stale global state" hazard fixed in reset_match_progress, just from
+	-- the opposite direction (queue second instead of first).
+	if G.STAGE == G.STAGES.RUN then
+		SPDRN.sendWarnMessage('[mmdbg] _join_queue refused: already in a run (G.STAGE == RUN)')
+		return
+	end
+
 	SPDRN.sendDebugMessage('[mmdbg] _join_queue kind=' .. tostring(kind) .. ' gamemode_key=' .. tostring(gamemode_key) .. ' -> game_mode=' .. tostring(game_mode) .. ' mm_max=' .. tostring(mm_max))
 
 	local handle = MPAPI.matchmaking.queue({

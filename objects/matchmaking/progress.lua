@@ -125,6 +125,25 @@ function SPDRN.reset_match_progress()
 	-- keyed by sender id -- see objects/matchmaking/location.lua.
 	SPDRN._locations = {}
 	SPDRN._last_broadcast_location = nil
+	-- Both of these are bare globals set by a run that may never get to consume them itself --
+	-- Seed Scout's scout-phase dollars override (objects/gamemodes/seed_scout.lua) is set the
+	-- instant start_run runs, and only consumed once SOME run reaches BLIND_SELECT next
+	-- (ui/lobby/run_start.lua's _check_pending_dollars_override, deliberately keyed off
+	-- G.STATE not "this specific run" -- see that function's own comment); a queued
+	-- run-transition (safe_start_run's request_run_transition) is likewise consumed by
+	-- whatever the next Game:update tick finds pending, not tied to any run identity either.
+	-- If a run gets abandoned before either fires -- e.g. a matchmaking match forms and
+	-- MPAPI.exit_to_menu() yanks the player out of a practice Seed Scout scout phase mid-run,
+	-- via focus.lua's on_lobby_connected, which has no idea SPDRN state like this exists --
+	-- both would otherwise survive untouched and fire against the NEXT run instead, which can
+	-- be a completely unrelated match. Confirmed live: an abandoned Seed Scout scout run's
+	-- stale $500 override landed on a subsequent All Deck practice run's blind select instead
+	-- of its real starting money. Clearing both here (before this match's own start_run/
+	-- request_run_transition calls, moments later in the same begin_run, set fresh ones) is
+	-- the same "stale global from a previous match" fix already applied to
+	-- _current_run_started_at above.
+	SPDRN._pending_dollars_override = nil
+	SPDRN._pending_run_transition = nil
 end
 
 -- Called at the start of every individual run, first and subsequent, within a
