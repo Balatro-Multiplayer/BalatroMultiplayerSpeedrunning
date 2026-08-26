@@ -198,21 +198,15 @@ local function build_description_box(mode, intent)
 	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = nodes }
 end
 
--- practice: Best Time (placeholder -- no leaderboard wiring yet) + Players (real, from the
--- registered GameMode). This is the box's one and only look for practice.
+-- practice: just Best Time (placeholder -- no leaderboard wiring yet). No player count here --
+-- practice is always solo.
 local function build_practice_stat_box(mode)
-	local gm = MPAPI.GameModes[mode.key]
-	local players = gm and (tostring(gm:get_min_players(MPAPI.LobbyType.PRIVATE)) .. '-' .. tostring(gm:get_max_players(MPAPI.LobbyType.PRIVATE))) or '?'
 	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
 		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
 			{ n = G.UIT.T, config = { text = 'Best Time', scale = 0.28, colour = G.C.WHITE, shadow = true } },
 		} },
 		{ n = G.UIT.R, config = { align = 'cm', minh = 0.45 }, nodes = {
 			{ n = G.UIT.T, config = { text = '--:--', scale = 0.55, colour = G.C.RED, shadow = true } },
-		} },
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.T, config = { text = 'Players ', scale = 0.28, colour = G.C.WHITE, shadow = true } },
-			{ n = G.UIT.T, config = { text = players, scale = 0.28, colour = G.C.MONEY, shadow = true } },
 		} },
 	} }
 end
@@ -236,7 +230,7 @@ end
 -- Ante/Round HUD boxes (functions/UI_definitions.lua's hud_ante/row_round_text): a label row
 -- above a darker inset value box.
 local function build_count_half(label, value)
-	return { n = G.UIT.C, config = { align = 'cm', padding = 0.04, minw = 1.05, minh = 0.85, colour = mix_colours(G.C.BLACK, G.C.L_BLACK, 0.5), emboss = 0.05, r = 0.1 }, nodes = {
+	return { n = G.UIT.C, config = { align = 'cm', padding = 0.02, minw = 1.0, minh = 0.85, colour = mix_colours(G.C.BLACK, G.C.L_BLACK, 0.5), emboss = 0.05, r = 0.1 }, nodes = {
 		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
 			{ n = G.UIT.T, config = { text = label, scale = 0.24, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
 		} },
@@ -256,11 +250,9 @@ local function build_find_game_stat_box(mode)
 		local in_match = counts and counts.inMatch or 0
 		return { nodes = { {
 			n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-				{ n = G.UIT.C, config = { minw = 0.15 }, nodes = {} },
 				build_count_half('In Queue', queued),
-				{ n = G.UIT.C, config = { minw = 0.1 }, nodes = {} },
+				{ n = G.UIT.C, config = { minw = 0.06 }, nodes = {} },
 				build_count_half('In Game', in_match),
-				{ n = G.UIT.C, config = { minw = 0.15 }, nodes = {} },
 			},
 		} } }
 	end)
@@ -298,10 +290,13 @@ local function build_name_plate(mode)
 		} }
 	end
 	local colours = CHIP_COLOURS[mode.chip_row] or { bg = G.C.BLACK, icon = G.C.WHITE }
+	-- minh fixed regardless of line count: a single-line name (Seed Scout, Challenge, ...)
+	-- centers its one line inside the same card height a two-line name (White Stake/Triple)
+	-- naturally fills, so every pillar's name card reads the same size.
 	return { n = G.UIT.R, config = { align = 'cm', padding = 0.06 }, nodes = {
 		{ n = G.UIT.R, config = {
 			align = 'cm', r = 0.1, outline = 1, outline_colour = colours.icon, colour = darken(colours.bg, 0.3),
-			minw = 2.3, emboss = 0.1, padding = 0.06, line_emboss = 1,
+			minw = 2.3, minh = 0.95, emboss = 0.1, padding = 0.06, line_emboss = 1,
 		}, nodes = text_nodes },
 	} }
 end
@@ -319,7 +314,7 @@ local function build_pillar(mode, intent, sprite_tracker)
 		select_config.button = button_for(mode, intent)
 	end
 
-	return { n = G.UIT.C, config = { align = 'cm' }, nodes = { {
+	return { n = G.UIT.C, config = { align = 'cm', padding = 0.15 }, nodes = { {
 		n = G.UIT.R,
 		config = { id = mode.key .. (mode.ranked and '_ranked' or ''), align = 'tm', r = 0.1, padding = 0.05 },
 		nodes = { {

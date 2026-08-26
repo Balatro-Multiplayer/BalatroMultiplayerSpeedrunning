@@ -104,7 +104,7 @@ MPAPI.on_loaded(function()
 			-- (a spacer row, a node's own `offset`) provably did not move the pillars at all;
 			-- this is the actual anchor the framework uses to position the box.
 			if G.MAIN_MENU_UI then
-				G.MAIN_MENU_UI.alignment.offset.y = 3
+				G.MAIN_MENU_UI.alignment.offset.y = 1.5
 				G.MAIN_MENU_UI:align_to_major()
 			end
 		end,
