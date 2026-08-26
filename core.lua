@@ -107,6 +107,11 @@ MPAPI.on_loaded(function()
 				G.MAIN_MENU_UI.alignment.offset.y = 1.5
 				G.MAIN_MENU_UI:align_to_major()
 			end
+			-- Fixes the title logo to the same spot regardless of intent -- entering this page
+			-- otherwise leaves whatever offset the PREVIOUS page's own cleanup animation last
+			-- set (e.g. spdrn_main_menu's cleanup raises it, spdrn_lobby's resets it to 0), so
+			-- which page you came from made the logo land in a different place each time.
+			MPAPI.set_logo_offset(-1, true)
 		end,
 		-- Runs on every way of leaving this page, including going straight into a run
 		-- (MPAPI.pages.teardown, not just a normal page swap) -- see MPAPI.pages' own

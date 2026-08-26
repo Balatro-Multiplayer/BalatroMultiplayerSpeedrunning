@@ -260,6 +260,28 @@ local function build_find_game_stat_box(mode)
 	return el.node
 end
 
+-- find_game only, shown below the In Queue/In Game card: every matchmade mode runs under
+-- MPAPI's "Order" (SPDRN.Ruleset.ORDER, see core.lua's lobby metadata) deterministic-RNG
+-- system, so this surfaces the existing (main-menu-less, per ui/the_order.lua's own comment)
+-- explainer overlay from here instead.
+local function build_order_card()
+	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
+		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
+			{ n = G.UIT.C, config = {
+				align = 'cm', minw = 2.2, minh = 0.6, padding = 0.06, r = 0.1,
+				colour = G.C.BLUE, shadow = true, hover = true, one_press = true, button = 'the_order_open',
+			}, nodes = {
+				{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
+					{ n = G.UIT.T, config = { text = 'Uses', scale = 0.32, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+				} },
+				{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
+					{ n = G.UIT.T, config = { text = 'The Order', scale = 0.32, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+				} },
+			} },
+		} },
+	} }
+end
+
 local function stat_box_for(mode, intent)
 	if intent == 'create_lobby' then
 		return build_lobby_stat_box(mode)
@@ -276,6 +298,15 @@ local function button_for(mode, intent)
 		return mode.queue_button
 	end
 	return mode.practice_button
+end
+
+local function select_label_for(intent)
+	if intent == 'create_lobby' then
+		return 'CREATE'
+	elseif intent == 'find_game' then
+		return 'QUEUE'
+	end
+	return 'START'
 end
 
 -- mode.name is either a plain string (one line) or a {line1, line2} table (White/Gold +
@@ -327,7 +358,7 @@ local function build_pillar(mode, intent, sprite_tracker)
 			nodes = {
 				{ n = G.UIT.R, config = { align = 'cm', padding = 0.15 }, nodes = {
 					{ n = G.UIT.R, config = select_config, nodes = {
-						{ n = G.UIT.T, config = { text = 'SELECT', scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
+						{ n = G.UIT.T, config = { text = select_label_for(intent), scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
 					} },
 				} },
 				build_name_plate(mode),
@@ -340,6 +371,9 @@ local function build_pillar(mode, intent, sprite_tracker)
 				{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
 					stat_box_for(mode, intent),
 				} },
+				intent == 'find_game' and { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
+					build_order_card(),
+				} } or nil,
 			},
 		} },
 	} } }
