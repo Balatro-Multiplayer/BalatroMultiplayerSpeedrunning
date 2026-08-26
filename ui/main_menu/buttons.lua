@@ -92,20 +92,3 @@ SPDRN.update_main_menu_buttons = function()
 	M.buttons.join_from_clipboard:update()
 	M.buttons.leaderboard:update()
 end
-
-SPDRN._show_searching_state = function(searching)
-	local M = SPDRN.main_menu
-	if not M.initialized or not M.find_game_args then
-		return
-	end
-	if searching then
-		M.find_game_args.label = { localize('b_cancel_search_cap') }
-		M.find_game_args.button = 'spdrn_cancel_queue'
-		M.find_game_args.colour = G.C.RED
-	else
-		M.find_game_args.label = { localize('b_find_game_cap') }
-		M.find_game_args.button = 'spdrn_find_game'
-		M.find_game_args.colour = G.C.BLUE
-	end
-	M.buttons.find_game:update()
-end

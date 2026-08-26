@@ -17,27 +17,10 @@ function SPDRN._ranked_queue_available()
 end
 
 -- Routes to the shared gamemode-select page (ui/main_menu/game_select.lua) instead of this
--- file's old dedicated overlay. That page's find_game intent only offers Casual queueing for
--- now (no live queue counts, no Ranked) -- spdrn_queue_ranked_white/gold below are kept,
--- unreferenced, for when Ranked gets its own place on that page.
+-- file's old dedicated overlay. This button always says "Find Game" and always lands here,
+-- regardless of any queue already in progress -- per-pillar QUEUE/CANCEL buttons on that page
+-- (see game_select.lua's spdrn_game_select_toggle_queue) are the only way to join/leave a
+-- specific queue now, so the page has to stay reachable at any time to manage them.
 G.FUNCS.spdrn_find_game = function()
 	MPAPI.pages.show('spdrn_game_select', { intent = 'find_game' })
-end
-
-G.FUNCS.spdrn_queue_ranked_white = function()
-	if not SPDRN._ranked_queue_available() then
-		return
-	end
-	SPDRN._join_queue(SPDRN.LobbyKind.RANKED, SPDRN.Gamemode.WHITE_STAKE_TRIPLE)
-end
-
-G.FUNCS.spdrn_queue_ranked_gold = function()
-	if not SPDRN._ranked_queue_available() then
-		return
-	end
-	SPDRN._join_queue(SPDRN.LobbyKind.RANKED, SPDRN.Gamemode.GOLD_STAKE_SINGLE)
-end
-
-G.FUNCS.spdrn_cancel_queue = function()
-	SPDRN._cancel_queue()
 end

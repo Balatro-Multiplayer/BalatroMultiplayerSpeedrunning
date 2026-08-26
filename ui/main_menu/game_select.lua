@@ -78,16 +78,20 @@ local PRACTICE_LOBBY_MODES = {
 -- of a 2x2 grid of stat buttons. Grouped by ranked-status (both Ranked, then both Casual), not
 -- by gamemode, so build_game_select_ui's ranked-transition spacer (below) lands in the right
 -- place -- keep any future addition to this list sorted the same way (all entries sharing a
--- `ranked` value adjacent to each other).
+-- `ranked` value adjacent to each other). game_mode_stat_key doubles as the exact wire
+-- game_mode string SPDRN._join_queue computes internally (SPDRN._queue_handles is keyed by
+-- it too) -- there's deliberately no separate queue_button id per mode anymore: the SELECT
+-- button is built dynamically (build_queue_select_button) since it has to flip between
+-- QUEUE/CANCEL live as this exact key's own queued state changes.
 local FIND_GAME_MODES = {
 	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple Ranked' }, chip_row = CHIP_ROW.white_stake_triple_ranked,
-		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_queue_ranked_white' },
+		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE },
 	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single Ranked' }, chip_row = CHIP_ROW.gold_stake_single_ranked,
-		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_queue_ranked_gold' },
+		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE },
 	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
-		ranked = false, game_mode_stat_key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_game_select_queue_white_stake_triple' },
+		ranked = false, game_mode_stat_key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE },
 	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single' }, chip_row = CHIP_ROW.gold_stake_single,
-		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_game_select_queue_gold_stake_single' },
+		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE },
 }
 
 -- Live queue/in-game counts while the find_game intent is open. Started from the page's
@@ -99,18 +103,41 @@ local _find_game_poller = nil
 local _latest_find_game_counts = nil
 local _find_game_stat_els = {}
 
+-- Every find_game pillar's SELECT button, keyed by the same wire game_mode string as
+-- SPDRN._queue_handles -- see build_queue_select_button. Refreshed live off queue events
+-- (SPDRN.refresh_game_select_queue_state, called from objects/matchmaking/queue.lua), not just
+-- the 5s count poll, so a QUEUE click flips to CANCEL immediately.
+local _find_game_select_els = {}
+
 local function refresh_find_game_stats()
 	for _, el in pairs(_find_game_stat_els) do
 		el:update()
 	end
 end
 
-function SPDRN.stop_find_game_polling()
+-- Called from SPDRN._join_queue/_cancel_queue's handle event listeners any time a queue this
+-- player is searching starts, ends, or errors -- harmless (and a no-op) when the find_game
+-- pillars aren't the page currently on screen, since _find_game_select_els is only populated
+-- while they are.
+function SPDRN.refresh_game_select_queue_state()
+	for _, el in pairs(_find_game_select_els) do
+		el:update()
+	end
+end
+
+local function stop_find_game_poller_only()
 	if _find_game_poller then
 		_find_game_poller.stop()
 		_find_game_poller = nil
 	end
+end
+
+-- Called from the page's dispose() (core.lua) when leaving find_game entirely -- safe to drop
+-- both els tables here since the page (and every node they point at) is going away with it.
+function SPDRN.stop_find_game_polling()
+	stop_find_game_poller_only()
 	_find_game_stat_els = {}
+	_find_game_select_els = {}
 end
 
 -- See build_chip_sprite's comment: Balatro's own UI teardown never calls :remove() on a
@@ -122,8 +149,15 @@ function SPDRN.dispose_game_select_sprites(sprites)
 	end
 end
 
+-- Called from on_enter (core.lua), which runs AFTER build() has already populated
+-- _find_game_stat_els/_find_game_select_els for this same page transition -- must only stop a
+-- previous poller, not route through the public SPDRN.stop_find_game_polling(), which also
+-- wipes both els tables (correct when actually leaving the page, but here it would discard the
+-- very elements build() just created, permanently breaking their live refresh for the rest of
+-- this page visit -- confirmed live: the QUEUE/CANCEL button and the In Queue/In Game counts
+-- both never updated in place because of this).
 function SPDRN.start_find_game_polling()
-	SPDRN.stop_find_game_polling()
+	stop_find_game_poller_only()
 	_latest_find_game_counts = nil
 	_find_game_poller = MPAPI.matchmaking.create_queue_counts_poller(SPDRN.id, FIND_GAME_POLL_INTERVAL_SECONDS, function(err, game_modes)
 		_latest_find_game_counts = game_modes or {}
@@ -287,8 +321,6 @@ end
 local function button_for(mode, intent)
 	if intent == 'create_lobby' then
 		return mode.lobby_button
-	elseif intent == 'find_game' then
-		return mode.queue_button
 	end
 	return mode.practice_button
 end
@@ -296,10 +328,54 @@ end
 local function select_label_for(intent)
 	if intent == 'create_lobby' then
 		return 'CREATE'
-	elseif intent == 'find_game' then
-		return 'QUEUE'
 	end
 	return 'START'
+end
+
+-- find_game's SELECT button, rebuilt in place (via MPAPI.ui_element) any time this exact
+-- mode's own queued state changes: QUEUE while not searching, CANCEL (red) while searching.
+-- ref_table carries what the single shared toggle handler (spdrn_game_select_toggle_queue,
+-- below) needs to act -- either leave this queue or join it, keyed by the same wire game_mode
+-- string SPDRN._queue_handles uses.
+local function build_queue_select_button(mode, is_disabled)
+	local el = MPAPI.ui_element(function()
+		local queued = SPDRN._queue_handles[mode.game_mode_stat_key] ~= nil
+		local config = {
+			align = 'cm', minh = 0.5, minw = 2.2, padding = 0.06, r = 0.1,
+			colour = is_disabled and G.C.UI.BACKGROUND_INACTIVE or (queued and G.C.RED or G.C.ORANGE),
+		}
+		if not is_disabled then
+			config.shadow = true
+			config.hover = true
+			config.one_press = true
+			config.button = 'spdrn_game_select_toggle_queue'
+			config.ref_table = queued
+				and { game_mode = mode.game_mode_stat_key }
+				or { game_mode = mode.game_mode_stat_key, kind = mode.ranked and SPDRN.LobbyKind.RANKED or SPDRN.LobbyKind.CASUAL, gamemode_key = mode.key }
+		end
+		return { nodes = { { n = G.UIT.R, config = config, nodes = {
+			{ n = G.UIT.T, config = { text = queued and 'CANCEL' or 'QUEUE', scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
+		} } } }
+	end)
+	_find_game_select_els[mode.game_mode_stat_key] = el
+	return el.node
+end
+
+-- The single handler behind every find_game pillar's SELECT/CANCEL button. Whether this join
+-- or leaves depends on ref_table.kind's presence, not any state read here -- the button that
+-- was actually clicked already encoded, at the moment it was rendered, which action it means
+-- (see build_queue_select_button) -- so this can't race against a queue state change that
+-- happens between click and handling.
+G.FUNCS.spdrn_game_select_toggle_queue = function(e)
+	local rt = e.config.ref_table
+	if not rt then
+		return
+	end
+	if rt.kind then
+		SPDRN._join_queue(rt.kind, rt.gamemode_key)
+	else
+		SPDRN._cancel_queue(rt.game_mode)
+	end
 end
 
 -- mode.name is either a plain string (one line) or a {line1, line2} table (White/Gold +
@@ -325,8 +401,10 @@ local function build_name_plate(mode)
 	} }
 end
 
-local function build_pillar(mode, intent, sprite_tracker)
-	local is_disabled = intent == 'find_game' and mode.ranked and not SPDRN._ranked_queue_available()
+local function build_select_button(mode, intent, is_disabled)
+	if intent == 'find_game' then
+		return build_queue_select_button(mode, is_disabled)
+	end
 	local select_config = {
 		align = 'cm', minh = 0.5, minw = 2.2, padding = 0.06, r = 0.1,
 		colour = is_disabled and G.C.UI.BACKGROUND_INACTIVE or G.C.ORANGE,
@@ -337,6 +415,13 @@ local function build_pillar(mode, intent, sprite_tracker)
 		select_config.one_press = true
 		select_config.button = button_for(mode, intent)
 	end
+	return { n = G.UIT.R, config = select_config, nodes = {
+		{ n = G.UIT.T, config = { text = select_label_for(intent), scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
+	} }
+end
+
+local function build_pillar(mode, intent, sprite_tracker)
+	local is_disabled = intent == 'find_game' and mode.ranked and not SPDRN._ranked_queue_available()
 
 	return { n = G.UIT.C, config = { align = 'cm', padding = 0.15 }, nodes = { {
 		n = G.UIT.R,
@@ -350,9 +435,7 @@ local function build_pillar(mode, intent, sprite_tracker)
 			config = { align = 'tm', minh = 7.4, colour = mix_colours(G.C.BLACK, G.C.L_BLACK, 0.5), r = 0.1, outline = 1, outline_colour = G.C.L_BLACK },
 			nodes = {
 				{ n = G.UIT.R, config = { align = 'cm', padding = 0.15 }, nodes = {
-					{ n = G.UIT.R, config = select_config, nodes = {
-						{ n = G.UIT.T, config = { text = select_label_for(intent), scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
-					} },
+					build_select_button(mode, intent, is_disabled),
 				} },
 				build_name_plate(mode),
 				{ n = G.UIT.R, config = { align = 'cm', padding = 0.05, minh = 1.1 }, nodes = {
@@ -404,11 +487,4 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 			{ n = G.UIT.R, config = { align = 'cm', padding = 0 }, nodes = row },
 		},
 	}
-end
-
-G.FUNCS.spdrn_game_select_queue_white_stake_triple = function()
-	SPDRN._join_queue(SPDRN.LobbyKind.CASUAL, SPDRN.Gamemode.WHITE_STAKE_TRIPLE)
-end
-G.FUNCS.spdrn_game_select_queue_gold_stake_single = function()
-	SPDRN._join_queue(SPDRN.LobbyKind.CASUAL, SPDRN.Gamemode.GOLD_STAKE_SINGLE)
 end
