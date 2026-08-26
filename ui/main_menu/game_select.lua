@@ -370,6 +370,11 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 		row[#row + 1] = build_pillar(mode, intent, sprite_tracker)
 	end
 
+	-- Getting the pillars to sit lower on the page is NOT done here: a spacer row above this
+	-- one, and a node's own `offset`, were both tried and measurably did nothing -- the box's
+	-- position is re-anchored every frame regardless of this content. The actual fix is in
+	-- core.lua's on_enter, which nudges G.MAIN_MENU_UI.alignment.offset.y directly (the same
+	-- field api/page/manager.lua itself sets to 0 after construction).
 	return {
 		n = G.UIT.ROOT,
 		config = { align = 'tm', colour = G.C.CLEAR },

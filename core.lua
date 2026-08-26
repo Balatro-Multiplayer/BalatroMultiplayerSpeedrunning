@@ -99,6 +99,14 @@ MPAPI.on_loaded(function()
 				SPDRN.start_find_game_polling()
 			end
 			SPDRN.loosen_game_select_sprites(self._chip_sprites)
+			-- Directly nudges the whole page UIBox down via the exact field
+			-- api/page/manager.lua itself sets to 0 after construction -- content-side spacing
+			-- (a spacer row, a node's own `offset`) provably did not move the pillars at all;
+			-- this is the actual anchor the framework uses to position the box.
+			if G.MAIN_MENU_UI then
+				G.MAIN_MENU_UI.alignment.offset.y = 3
+				G.MAIN_MENU_UI:align_to_major()
+			end
 		end,
 		-- Runs on every way of leaving this page, including going straight into a run
 		-- (MPAPI.pages.teardown, not just a normal page swap) -- see MPAPI.pages' own
