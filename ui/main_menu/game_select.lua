@@ -75,18 +75,19 @@ local PRACTICE_LOBBY_MODES = {
 
 -- Find Game only offers the two matchmade gamemodes, each as a Casual/Ranked pair -- matching
 -- the old Find Game overlay's Ranked x Casual x White x Gold matrix, just as 4 pillars instead
--- of a 2x2 grid of stat buttons. Grouped by ranked-status (both Casual, then both Ranked), not
+-- of a 2x2 grid of stat buttons. Grouped by ranked-status (both Ranked, then both Casual), not
 -- by gamemode, so build_game_select_ui's ranked-transition spacer (below) lands in the right
--- place -- keep any future addition to this list sorted the same way.
+-- place -- keep any future addition to this list sorted the same way (all entries sharing a
+-- `ranked` value adjacent to each other).
 local FIND_GAME_MODES = {
-	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
-		ranked = false, game_mode_stat_key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_game_select_queue_white_stake_triple' },
-	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single' }, chip_row = CHIP_ROW.gold_stake_single,
-		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_game_select_queue_gold_stake_single' },
 	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple Ranked' }, chip_row = CHIP_ROW.white_stake_triple_ranked,
 		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_queue_ranked_white' },
 	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single Ranked' }, chip_row = CHIP_ROW.gold_stake_single_ranked,
 		ranked = true, game_mode_stat_key = SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_queue_ranked_gold' },
+	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
+		ranked = false, game_mode_stat_key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, queue_button = 'spdrn_game_select_queue_white_stake_triple' },
+	{ key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, name = { 'Gold Stake', 'Single' }, chip_row = CHIP_ROW.gold_stake_single,
+		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE, queue_button = 'spdrn_game_select_queue_gold_stake_single' },
 }
 
 -- Live queue/in-game counts while the find_game intent is open. Started from the page's
@@ -118,6 +119,22 @@ end
 function SPDRN.dispose_game_select_sprites(sprites)
 	for _, spr in ipairs(sprites or {}) do
 		pcall(function() spr:remove() end)
+	end
+end
+
+-- A G.UIT.O node defaults its embedded object's role to xy_bond = 'Strong' (engine/ui.lua's
+-- `self.config.object:set_role(self.config.role or {..., xy_bond = 'Strong', ...})`), which
+-- means the layout system recomputes the sprite's position from its parent every frame
+-- regardless of what Moveable:drag() just set it to -- confirmed live (G.ANIMATIONS entries for
+-- this atlas all reported role.xy_bond == 'Strong'), and it's why the chips visually didn't
+-- move under drag even with states.drag.can already true. Must run from on_enter (core.lua),
+-- AFTER the UIBox has built the tree and already called the default set_role once -- mutating
+-- this in build_chip_sprite itself, before that call happens, would just get overwritten.
+function SPDRN.loosen_game_select_sprites(sprites)
+	for _, spr in ipairs(sprites or {}) do
+		if spr.role then
+			spr.role.xy_bond = 'Weak'
+		end
 	end
 end
 
@@ -357,18 +374,7 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 		n = G.UIT.ROOT,
 		config = { align = 'tm', colour = G.C.CLEAR },
 		nodes = {
-			{ n = G.UIT.R, config = { align = 'cm', padding = 0.2 }, nodes = {
-				{ n = G.UIT.T, config = { text = 'Choose a Gamemode', scale = 0.55, colour = G.C.WHITE, shadow = true } },
-			} },
-			-- Pushes the pillar row down toward the bottom of the page without changing the
-			-- pillars' own height -- top-anchoring the ROOT (instead of centering it) makes this
-			-- spacer's size a direct, predictable control over how far down they sit. (A node's
-			-- own `offset` was tried instead of this spacer and rejected: it shifts the drawn
-			-- position without the parent's layout/anchor calculations accounting for the shift,
-			-- desyncing it from the page's own 'bmi' bottom-anchor and causing overlap with the
-			-- title logo above rather than moving the pillars down.)
-			{ n = G.UIT.R, config = { minh = 3.2 }, nodes = {} },
-			{ n = G.UIT.R, config = { align = 'cm', padding = 0.2 }, nodes = row },
+			{ n = G.UIT.R, config = { align = 'cm', padding = 0 }, nodes = row },
 		},
 	}
 end

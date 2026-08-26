@@ -90,11 +90,15 @@ MPAPI.on_loaded(function()
 			return SPDRN.build_game_select_ui(self.params and self.params.intent, self._chip_sprites)
 		end,
 		-- The find_game intent's pillars show live queue/in-game counts (ui/main_menu/game_select.lua);
-		-- the poller driving them starts/stops with this page's own show/leave lifecycle.
+		-- the poller driving them starts/stops with this page's own show/leave lifecycle. Also
+		-- weakens each chip sprite's xy_bond (see SPDRN.loosen_game_select_sprites) -- must run
+		-- here, after the UIBox has actually built the node tree and called set_role on each
+		-- sprite, not from build() where the sprite doesn't have a role yet to override.
 		on_enter = function(self)
 			if self.params and self.params.intent == 'find_game' then
 				SPDRN.start_find_game_polling()
 			end
+			SPDRN.loosen_game_select_sprites(self._chip_sprites)
 		end,
 		-- Runs on every way of leaving this page, including going straight into a run
 		-- (MPAPI.pages.teardown, not just a normal page swap) -- see MPAPI.pages' own
