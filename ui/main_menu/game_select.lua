@@ -1,8 +1,10 @@
--- The shared "choose a gamemode" page (MPAPI page spdrn_game_select), styled after Balatro's
--- own Blind Select pillars (functions/UI_definitions.lua's create_UIBox_blind_choice), minus
--- the run-specific parts (blind chip dissolve-in, tag/skip-reward row, run-state colouring) --
--- just the pillar shape: a select button, a name plate, a gamemode chip icon, a description
--- plate, and a stat box, stretched to fill the rest of the page's height.
+-- The shared "choose a gamemode" page (MPAPI page spdrn_game_select), built on MPAPI's generic
+-- pillar-row layout (BalatroMultiplayerAPI/api/ui_pillar_row.lua, extracted from an earlier,
+-- SPDRN-only version of this same file) -- a select button, a name plate, a gamemode chip icon,
+-- a description plate, and a stat box, stretched to fill the rest of the page's height. This
+-- file now only supplies SPDRN's own data and content (which gamemodes, their art/colours/
+-- descriptions, live queue polling, matchmaking button handlers); the pillar shape itself lives
+-- once in MPAPI so any other MPAPI-consuming mod can build its own picker the same way.
 --
 -- Replaces the three separate gamemode-picker overlays Find Game/Practice/Create Lobby used
 -- to open (see ui/main_menu/{find_game,practice,create_lobby}.lua). Which pillars are shown
@@ -76,11 +78,11 @@ local PRACTICE_LOBBY_MODES = {
 -- Find Game only offers the two matchmade gamemodes, each as a Casual/Ranked pair -- matching
 -- the old Find Game overlay's Ranked x Casual x White x Gold matrix, just as 4 pillars instead
 -- of a 2x2 grid of stat buttons. Grouped by ranked-status (both Ranked, then both Casual), not
--- by gamemode, so build_game_select_ui's ranked-transition spacer (below) lands in the right
--- place -- keep any future addition to this list sorted the same way (all entries sharing a
--- `ranked` value adjacent to each other). game_mode_stat_key doubles as the exact wire
--- game_mode string SPDRN._join_queue computes internally (SPDRN._queue_handles is keyed by
--- it too) -- there's deliberately no separate queue_button id per mode anymore: the SELECT
+-- by gamemode, so `mode.ranked` (fed to MPAPI.ui_pillar_row as each item's `group`) lands
+-- adjacent entries in the same cluster -- keep any future addition to this list sorted the same
+-- way (all entries sharing a `ranked` value adjacent to each other). game_mode_stat_key doubles
+-- as the exact wire game_mode string SPDRN._join_queue computes internally (SPDRN._queue_handles
+-- is keyed by it too) -- there's deliberately no separate queue_button id per mode: the SELECT
 -- button is built dynamically (build_queue_select_button) since it has to flip between
 -- QUEUE/CANCEL live as this exact key's own queued state changes.
 local FIND_GAME_MODES = {
@@ -140,15 +142,6 @@ function SPDRN.stop_find_game_polling()
 	_find_game_select_els = {}
 end
 
--- See build_chip_sprite's comment: Balatro's own UI teardown never calls :remove() on a
--- G.UIT.O node's embedded object, so the spdrn_game_select page (core.lua) must do it itself
--- in its dispose() hook, passing back the same array SPDRN.build_game_select_ui populated.
-function SPDRN.dispose_game_select_sprites(sprites)
-	for _, spr in ipairs(sprites or {}) do
-		pcall(function() spr:remove() end)
-	end
-end
-
 -- Called from on_enter (core.lua), which runs AFTER build() has already populated
 -- _find_game_stat_els/_find_game_select_els for this same page transition -- must only stop a
 -- previous poller, not route through the public SPDRN.stop_find_game_polling(), which also
@@ -166,91 +159,30 @@ function SPDRN.start_find_game_polling()
 	_find_game_poller.start()
 end
 
--- `tracker` collects every chip sprite created for the page currently being built, so the
--- page's dispose() (core.lua's spdrn_game_select registration) can :remove() them when the
--- page is torn down -- see MPAPI.pages' _dispose_instance for why that's required (Balatro's
--- own Node:remove() does not cascade into a G.UIT.O node's config.object).
-local function build_chip_sprite(row, tracker)
-	-- Plain Sprite, not AnimatedSprite: AnimatedSprite:animate() (engine/animatedsprite.lua)
-	-- unconditionally free-runs through every column of its row based on elapsed real time --
-	-- confirmed live (a screenshot taken mid-drag caught the sheet's later, part-faded columns
-	-- showing as an unintended diagonal-stripe overlay). Vanilla's blind chips use AnimatedSprite
-	-- because they have a real dissolve-in transition to play; this icon is meant to sit static,
-	-- so a plain Sprite (no per-frame column cycling) is what "static" actually requires.
-	-- Deliberately non-interactive, matching vanilla's own blind chip: create_UIBox_blind_choice
-	-- (functions/UI_definitions.lua) embeds its chip animation as a bare
-	-- {n=G.UIT.O, config={object=...}} with no hover/collide/drag config at all -- the chip icon
-	-- is pure decoration, and all of a pillar's actual interactivity (hover wobble, click) comes
-	-- from the enclosing button/row nodes instead. An earlier version of this code set
-	-- states.collide/hover/drag.can = true directly on the sprite to make the icon itself
-	-- react to the cursor, which doesn't match how vanilla behaves and does not work for chip
-	-- icons embedded this way regardless (confirmed live: an embedded G.UIT.O object's role_type
-	-- is 'Minor', so Moveable:move_with_major recomputes its VT from the current, pre-drag T
-	-- every frame before Controller:update's drag() call gets a chance to move T for that
-	-- frame -- VT permanently chases the wrong target and the icon never visually follows the
-	-- cursor no matter what states are set).
-	local spr = Sprite(0, 0, 1.1, 1.1, G.ANIMATION_ATLAS['spdrn_gamemode_chips'], { x = 0, y = row })
-	if tracker then
-		tracker[#tracker + 1] = spr
-	end
-	return spr
-end
-
--- Small, secondary-info caption style -- the same scale/colour/no-shadow combination used
--- elsewhere in this codebase (and by vanilla Joker description sub-text) for a dimmer,
--- smaller line under a main label.
-local function small_caption(text)
-	return { n = G.UIT.R, config = { align = 'cm' }, nodes = {
-		{ n = G.UIT.T, config = { text = text, scale = 0.28, colour = G.C.UI.TEXT_INACTIVE, shadow = false } },
-	} }
+-- Plain Sprite, not AnimatedSprite: AnimatedSprite:animate() (engine/animatedsprite.lua)
+-- unconditionally free-runs through every column of its row based on elapsed real time --
+-- confirmed live (a screenshot taken mid-drag caught the sheet's later, part-faded columns
+-- showing as an unintended diagonal-stripe overlay). Vanilla's blind chips use AnimatedSprite
+-- because they have a real dissolve-in transition to play; this icon is meant to sit static, so
+-- a plain Sprite (no per-frame column cycling) is what "static" actually requires. Deliberately
+-- non-interactive too, matching vanilla's own blind chip (create_UIBox_blind_choice embeds its
+-- chip animation as a bare decoration with no hover/collide/drag config at all) -- MPAPI.ui_pillar_row
+-- embeds and tracks whatever's handed to it as `item.icon` for disposal; it never needs to be
+-- interactive itself.
+local function build_chip_sprite(row)
+	return Sprite(0, 0, 1.1, 1.1, G.ANIMATION_ATLAS['spdrn_gamemode_chips'], { x = 0, y = row })
 end
 
 -- The upper description plate: what the gamemode is (always two lines), and (find_game only)
 -- its time limit.
 local function build_description_box(mode, intent)
-	local nodes = {}
-	for _, line in ipairs(DESCRIPTION[mode.key] or {}) do
-		nodes[#nodes + 1] = { n = G.UIT.R, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.T, config = { text = line, scale = 0.32, colour = G.C.WHITE, shadow = true, maxw = 2.3 } },
-		} }
-	end
+	local caption = nil
 	if intent == 'find_game' then
 		local gm = MPAPI.GameModes[mode.key]
 		local minutes = gm and gm.duration_cap_seconds and math.floor(gm.duration_cap_seconds / 60)
-		nodes[#nodes + 1] = small_caption(minutes and (minutes .. 'm Time Limit') or '')
+		caption = minutes and (minutes .. 'm Time Limit') or ''
 	end
-	-- minh fixed at the two-line height regardless of how many lines this mode's own
-	-- description actually is (All Deck's is one line) -- same reasoning as build_name_plate's
-	-- own minh: a shorter description centers inside the same card size instead of a smaller box.
-	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, minh = 0.85, colour = G.C.BLACK, emboss = 0.05 }, nodes = nodes }
-end
-
--- practice: just Best Time (placeholder -- no leaderboard wiring yet). No player count here --
--- practice is always solo.
-local function build_practice_stat_box(mode)
-	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.T, config = { text = 'Best Time', scale = 0.28, colour = G.C.WHITE, shadow = true } },
-		} },
-		{ n = G.UIT.R, config = { align = 'cm', minh = 0.45 }, nodes = {
-			{ n = G.UIT.T, config = { text = '--:--', scale = 0.55, colour = G.C.RED, shadow = true } },
-		} },
-	} }
-end
-
--- create_lobby: just the player range (16-max private lobby for every current gamemode, hence
--- always reading "2-16" -- pulled from the GameMode definition rather than hardcoded).
-local function build_lobby_stat_box(mode)
-	local gm = MPAPI.GameModes[mode.key]
-	local players = gm and (tostring(gm:get_min_players(MPAPI.LobbyType.PRIVATE)) .. '-' .. tostring(gm:get_max_players(MPAPI.LobbyType.PRIVATE))) or '?'
-	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.T, config = { text = 'Players', scale = 0.3, colour = G.C.WHITE, shadow = true } },
-		} },
-		{ n = G.UIT.R, config = { align = 'cm', minh = 0.45 }, nodes = {
-			{ n = G.UIT.T, config = { text = players, scale = 0.55, colour = G.C.MONEY, shadow = true } },
-		} },
-	} }
+	return MPAPI.ui_pillar_description_box({ lines = DESCRIPTION[mode.key] or {}, caption = caption })
 end
 
 -- One half (Queue or In Game) of the find_game stat box, styled after the base game's own
@@ -275,13 +207,11 @@ local function build_find_game_stat_box(mode)
 		local counts = _latest_find_game_counts and _latest_find_game_counts[mode.game_mode_stat_key]
 		local queued = counts and counts.queued or 0
 		local in_match = counts and counts.inMatch or 0
-		return { nodes = { {
-			n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
-				build_count_half('In Queue', queued),
-				{ n = G.UIT.C, config = { minw = 0.06 }, nodes = {} },
-				build_count_half('In Game', in_match),
-			},
-		} } }
+		return { nodes = { MPAPI.ui_embossed_box({ minw = 2.4, nodes = {
+			build_count_half('In Queue', queued),
+			{ n = G.UIT.C, config = { minw = 0.06 }, nodes = {} },
+			build_count_half('In Game', in_match),
+		} }) } }
 	end)
 	_find_game_stat_els[mode.game_mode_stat_key] = el
 	return el.node
@@ -292,7 +222,7 @@ end
 -- system, so this surfaces the existing (main-menu-less, per ui/the_order.lua's own comment)
 -- explainer overlay from here instead.
 local function build_order_card()
-	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = {
+	return MPAPI.ui_embossed_box({ minw = 2.4, nodes = {
 		{ n = G.UIT.R, config = { align = 'cm' }, nodes = {
 			{ n = G.UIT.C, config = {
 				align = 'cm', minw = 2.2, minh = 0.6, padding = 0.06, r = 0.1,
@@ -306,16 +236,20 @@ local function build_order_card()
 				} },
 			} },
 		} },
-	} }
+	} })
 end
 
 local function stat_box_for(mode, intent)
 	if intent == 'create_lobby' then
-		return build_lobby_stat_box(mode)
+		local gm = MPAPI.GameModes[mode.key]
+		local players = gm and (tostring(gm:get_min_players(MPAPI.LobbyType.PRIVATE)) .. '-' .. tostring(gm:get_max_players(MPAPI.LobbyType.PRIVATE))) or '?'
+		return MPAPI.ui_pillar_stat_box({ label = 'Players', value = players, value_colour = G.C.MONEY })
 	elseif intent == 'find_game' then
 		return build_find_game_stat_box(mode)
 	end
-	return build_practice_stat_box(mode)
+	-- practice: just Best Time (placeholder -- no leaderboard wiring yet). No player count here
+	-- -- practice is always solo.
+	return MPAPI.ui_pillar_stat_box({ label = 'Best Time', value = '--:--', value_colour = G.C.RED })
 end
 
 local function button_for(mode, intent)
@@ -336,7 +270,8 @@ end
 -- mode's own queued state changes: QUEUE while not searching, CANCEL (red) while searching.
 -- ref_table carries what the single shared toggle handler (spdrn_game_select_toggle_queue,
 -- below) needs to act -- either leave this queue or join it, keyed by the same wire game_mode
--- string SPDRN._queue_handles uses.
+-- string SPDRN._queue_handles uses. Fully custom (not MPAPI.ui_pillar_select_button) since it
+-- needs this reactive two-state colour flip, which is SPDRN's own queueing concern.
 local function build_queue_select_button(mode, is_disabled)
 	local el = MPAPI.ui_element(function()
 		local queued = SPDRN._queue_handles[mode.game_mode_stat_key] ~= nil
@@ -378,101 +313,44 @@ G.FUNCS.spdrn_game_select_toggle_queue = function(e)
 	end
 end
 
--- mode.name is either a plain string (one line) or a {line1, line2} table (White/Gold +
--- Ranked, whose names are too long for one line at this width). Coloured from the chip icon's
--- own two dominant colours (CHIP_COLOURS) rather than a hand-picked colour.
-local function build_name_plate(mode)
-	local lines = type(mode.name) == 'table' and mode.name or { mode.name }
-	local text_nodes = {}
-	for _, line in ipairs(lines) do
-		text_nodes[#text_nodes + 1] = { n = G.UIT.R, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.T, config = { text = line, scale = 0.35, colour = G.C.WHITE, shadow = true, maxw = 2.2 } },
-		} }
-	end
-	local colours = CHIP_COLOURS[mode.chip_row] or { bg = G.C.BLACK, icon = G.C.WHITE }
-	-- minh fixed regardless of line count: a single-line name (Seed Scout, Challenge, ...)
-	-- centers its one line inside the same card height a two-line name (White Stake/Triple)
-	-- naturally fills, so every pillar's name card reads the same size.
-	return { n = G.UIT.R, config = { align = 'cm', padding = 0.06 }, nodes = {
-		{ n = G.UIT.R, config = {
-			align = 'cm', r = 0.1, outline = 1, outline_colour = colours.icon, colour = darken(colours.bg, 0.3),
-			minw = 2.3, minh = 0.95, emboss = 0.1, padding = 0.06, line_emboss = 1,
-		}, nodes = text_nodes },
-	} }
-end
-
-local function build_select_button(mode, intent, is_disabled)
+local function build_select(mode, intent, is_disabled)
 	if intent == 'find_game' then
 		return build_queue_select_button(mode, is_disabled)
 	end
-	local select_config = {
-		align = 'cm', minh = 0.5, minw = 2.2, padding = 0.06, r = 0.1,
-		colour = is_disabled and G.C.UI.BACKGROUND_INACTIVE or G.C.ORANGE,
-	}
-	if not is_disabled then
-		select_config.shadow = true
-		select_config.hover = true
-		select_config.one_press = true
-		select_config.button = button_for(mode, intent)
-	end
-	return { n = G.UIT.R, config = select_config, nodes = {
-		{ n = G.UIT.T, config = { text = select_label_for(intent), scale = 0.4, colour = is_disabled and G.C.UI.TEXT_INACTIVE or G.C.UI.TEXT_LIGHT, shadow = not is_disabled } },
-	} }
+	return MPAPI.ui_pillar_select_button({
+		label = select_label_for(intent),
+		button = button_for(mode, intent),
+		disabled = is_disabled,
+	})
 end
 
-local function build_pillar(mode, intent, sprite_tracker)
-	local is_disabled = intent == 'find_game' and mode.ranked and not SPDRN._ranked_queue_available()
-
-	return { n = G.UIT.C, config = { align = 'cm', padding = 0.15 }, nodes = { {
-		n = G.UIT.R,
-		config = { id = mode.key .. (mode.ranked and '_ranked' or ''), align = 'tm', r = 0.1, padding = 0.05 },
-		nodes = { {
-			-- The visible pillar background: align = 'tm' (not 'cm') and a tall minh keep the
-			-- content stacked at the top and let the coloured/outlined background itself stretch
-			-- down to fill the rest of the page, instead of centering the (shorter) content
-			-- inside a tall box and leaving empty gaps above and below it.
-			n = G.UIT.R,
-			config = { align = 'tm', minh = 7.4, colour = mix_colours(G.C.BLACK, G.C.L_BLACK, 0.5), r = 0.1, outline = 1, outline_colour = G.C.L_BLACK },
-			nodes = {
-				{ n = G.UIT.R, config = { align = 'cm', padding = 0.15 }, nodes = {
-					build_select_button(mode, intent, is_disabled),
-				} },
-				build_name_plate(mode),
-				{ n = G.UIT.R, config = { align = 'cm', padding = 0.05, minh = 1.1 }, nodes = {
-					{ n = G.UIT.O, config = { object = build_chip_sprite(mode.chip_row, sprite_tracker) } },
-				} },
-				{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
-					build_description_box(mode, intent),
-				} },
-				{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
-					stat_box_for(mode, intent),
-				} },
-				intent == 'find_game' and { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
-					build_order_card(),
-				} } or nil,
-			},
-		} },
-	} } }
-end
-
--- sprite_tracker: an array the caller (the spdrn_game_select page's build(), core.lua) owns
--- and later passes to SPDRN.dispose_game_select_sprites to :remove() every chip sprite this
--- call created -- see build_chip_sprite's comment for why that's required.
-function SPDRN.build_game_select_ui(intent, sprite_tracker)
+-- Builds the pillar-row controller (MPAPI.ui_pillar_row's return value: {definition, row_node,
+-- dispose}) for the given intent. The caller (spdrn_game_select's MPAPI.Page registration in
+-- core.lua) owns the controller for this page's lifetime: hand `.definition` to build(), and
+-- call `:dispose()` from the page's own dispose() hook so every tracked chip icon gets
+-- :remove()'d -- see api/ui_pillar_row.lua's header comment for why that's required.
+function SPDRN.build_game_select_ui(intent)
 	intent = intent or 'practice'
 	local modes = intent == 'find_game' and FIND_GAME_MODES or PRACTICE_LOBBY_MODES
 
-	local row = {}
-	local prev_ranked = nil
+	local items = {}
 	for _, mode in ipairs(modes) do
-		-- Extra gap between the Casual and Ranked groups (find_game only -- prev_ranked stays
-		-- nil for every practice/create_lobby mode, none of which set `ranked`, so this never
-		-- fires there).
-		if prev_ranked ~= nil and mode.ranked ~= prev_ranked then
-			row[#row + 1] = { n = G.UIT.C, config = { minw = 0.9 }, nodes = {} }
-		end
-		prev_ranked = mode.ranked
-		row[#row + 1] = build_pillar(mode, intent, sprite_tracker)
+		local is_disabled = intent == 'find_game' and mode.ranked and not SPDRN._ranked_queue_available()
+		local colours = CHIP_COLOURS[mode.chip_row] or { bg = G.C.BLACK, icon = G.C.WHITE }
+		items[#items + 1] = {
+			id = mode.key .. (mode.ranked and '_ranked' or ''),
+			group = mode.ranked,
+			icon = build_chip_sprite(mode.chip_row),
+			select = build_select(mode, intent, is_disabled),
+			name_plate = MPAPI.ui_pillar_name_plate({
+				lines = mode.name,
+				bg_colour = darken(colours.bg, 0.3),
+				outline_colour = colours.icon,
+			}),
+			description = build_description_box(mode, intent),
+			stat_box = stat_box_for(mode, intent),
+			extra = intent == 'find_game' and build_order_card() or nil,
+		}
 	end
 
 	-- Getting the pillars to sit lower on the page is NOT done here: a spacer row above this
@@ -480,11 +358,5 @@ function SPDRN.build_game_select_ui(intent, sprite_tracker)
 	-- position is re-anchored every frame regardless of this content. The actual fix is in
 	-- core.lua's on_enter, which nudges G.MAIN_MENU_UI.alignment.offset.y directly (the same
 	-- field api/page/manager.lua itself sets to 0 after construction).
-	return {
-		n = G.UIT.ROOT,
-		config = { align = 'tm', colour = G.C.CLEAR },
-		nodes = {
-			{ n = G.UIT.R, config = { align = 'cm', padding = 0 }, nodes = row },
-		},
-	}
+	return MPAPI.ui_pillar_row({ items = items, group_gap = 0.9 })
 end
