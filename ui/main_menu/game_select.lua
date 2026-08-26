@@ -53,7 +53,7 @@ local DESCRIPTION = {
 	[SPDRN.Gamemode.GOLD_STAKE_SINGLE] = { 'Gold Stake.', 'One Run.' },
 	[SPDRN.Gamemode.SEED_SCOUT] = { '60 Seconds', 'to Scout.' },
 	[SPDRN.Gamemode.CHALLENGE] = { 'Challenge', 'Deck.' },
-	[SPDRN.Gamemode.ALL_DECK] = { '15', 'Runs.' },
+	[SPDRN.Gamemode.ALL_DECK] = { '15 Runs.' },
 	[SPDRN.Gamemode.STAKE_CLIMB] = { 'Every Stake', 'in Order.' },
 }
 
@@ -122,22 +122,6 @@ function SPDRN.dispose_game_select_sprites(sprites)
 	end
 end
 
--- A G.UIT.O node defaults its embedded object's role to xy_bond = 'Strong' (engine/ui.lua's
--- `self.config.object:set_role(self.config.role or {..., xy_bond = 'Strong', ...})`), which
--- means the layout system recomputes the sprite's position from its parent every frame
--- regardless of what Moveable:drag() just set it to -- confirmed live (G.ANIMATIONS entries for
--- this atlas all reported role.xy_bond == 'Strong'), and it's why the chips visually didn't
--- move under drag even with states.drag.can already true. Must run from on_enter (core.lua),
--- AFTER the UIBox has built the tree and already called the default set_role once -- mutating
--- this in build_chip_sprite itself, before that call happens, would just get overwritten.
-function SPDRN.loosen_game_select_sprites(sprites)
-	for _, spr in ipairs(sprites or {}) do
-		if spr.role then
-			spr.role.xy_bond = 'Weak'
-		end
-	end
-end
-
 function SPDRN.start_find_game_polling()
 	SPDRN.stop_find_game_polling()
 	_latest_find_game_counts = nil
@@ -153,19 +137,25 @@ end
 -- page is torn down -- see MPAPI.pages' _dispose_instance for why that's required (Balatro's
 -- own Node:remove() does not cascade into a G.UIT.O node's config.object).
 local function build_chip_sprite(row, tracker)
-	local spr = AnimatedSprite(0, 0, 1.1, 1.1, G.ANIMATION_ATLAS['spdrn_gamemode_chips'], { x = 0, y = row })
-	spr:define_draw_steps({
-		{ shader = 'dissolve', shadow_height = 0.05 },
-		{ shader = 'dissolve' },
-	})
-	-- Node/Moveable default every object to collide.can = false (engine/node.lua) -- hover.can
-	-- and drag.can already default true, but without collide the object is never hit-tested, so
-	-- neither ever actually triggers. Real blind-select chips get this via their own G.UIT.O
-	-- node's can_collide config; setting it directly on the sprite here has the same effect and
-	-- doesn't depend on that node-level propagation.
-	spr.states.collide.can = true
-	spr.states.hover.can = true
-	spr.states.drag.can = true
+	-- Plain Sprite, not AnimatedSprite: AnimatedSprite:animate() (engine/animatedsprite.lua)
+	-- unconditionally free-runs through every column of its row based on elapsed real time --
+	-- confirmed live (a screenshot taken mid-drag caught the sheet's later, part-faded columns
+	-- showing as an unintended diagonal-stripe overlay). Vanilla's blind chips use AnimatedSprite
+	-- because they have a real dissolve-in transition to play; this icon is meant to sit static,
+	-- so a plain Sprite (no per-frame column cycling) is what "static" actually requires.
+	-- Deliberately non-interactive, matching vanilla's own blind chip: create_UIBox_blind_choice
+	-- (functions/UI_definitions.lua) embeds its chip animation as a bare
+	-- {n=G.UIT.O, config={object=...}} with no hover/collide/drag config at all -- the chip icon
+	-- is pure decoration, and all of a pillar's actual interactivity (hover wobble, click) comes
+	-- from the enclosing button/row nodes instead. An earlier version of this code set
+	-- states.collide/hover/drag.can = true directly on the sprite to make the icon itself
+	-- react to the cursor, which doesn't match how vanilla behaves and does not work for chip
+	-- icons embedded this way regardless (confirmed live: an embedded G.UIT.O object's role_type
+	-- is 'Minor', so Moveable:move_with_major recomputes its VT from the current, pre-drag T
+	-- every frame before Controller:update's drag() call gets a chance to move T for that
+	-- frame -- VT permanently chases the wrong target and the icon never visually follows the
+	-- cursor no matter what states are set).
+	local spr = Sprite(0, 0, 1.1, 1.1, G.ANIMATION_ATLAS['spdrn_gamemode_chips'], { x = 0, y = row })
 	if tracker then
 		tracker[#tracker + 1] = spr
 	end
@@ -195,7 +185,10 @@ local function build_description_box(mode, intent)
 		local minutes = gm and gm.duration_cap_seconds and math.floor(gm.duration_cap_seconds / 60)
 		nodes[#nodes + 1] = small_caption(minutes and (minutes .. 'm Time Limit') or '')
 	end
-	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, colour = G.C.BLACK, emboss = 0.05 }, nodes = nodes }
+	-- minh fixed at the two-line height regardless of how many lines this mode's own
+	-- description actually is (All Deck's is one line) -- same reasoning as build_name_plate's
+	-- own minh: a shorter description centers inside the same card size instead of a smaller box.
+	return { n = G.UIT.R, config = { align = 'cm', r = 0.1, padding = 0.06, minw = 2.4, minh = 0.85, colour = G.C.BLACK, emboss = 0.05 }, nodes = nodes }
 end
 
 -- practice: just Best Time (placeholder -- no leaderboard wiring yet). No player count here --
