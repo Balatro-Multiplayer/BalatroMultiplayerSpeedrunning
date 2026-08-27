@@ -35,7 +35,9 @@ end
 SPDRN._pending_run_transition = nil
 
 function SPDRN.request_run_transition(instance, deck, seed)
-	SPDRN._pending_run_transition = { instance = instance, deck = deck, seed = seed }
+	-- Stamped so the consumer below can tell this request's owning lobby is still the
+	-- current one -- see that function's own comment for why this matters.
+	SPDRN._pending_run_transition = { instance = instance, deck = deck, seed = seed, lobby = MPAPI.get_current_lobby() }
 end
 
 function SPDRN._check_pending_run_transition()
@@ -44,6 +46,20 @@ function SPDRN._check_pending_run_transition()
 		return
 	end
 	SPDRN._pending_run_transition = nil
+	-- The lobby that queued this transition (e.g. Seed Scout's on_run_lost restart) may have
+	-- been abandoned before the next tick got here -- a matchmaking match forming mid-run calls
+	-- MPAPI.exit_to_menu() via focus.lua's on_lobby_connected, which has zero awareness this
+	-- request exists, and MPAPI.join_lobby (called synchronously as part of handling that match)
+	-- already swaps MPAPI.get_current_lobby() over to the NEW matched lobby before that happens.
+	-- Firing pending.instance:start_run(...) anyway would call G.FUNCS.start_run for a lobby
+	-- that's no longer current, racing against exit_to_menu's own menu-teardown events -- the
+	-- exact "G.FUNCS.start_run's clear_queue corrupts an in-progress EventManager iteration"
+	-- hazard described above, just from a different pair of callers landing on the same tick.
+	-- Confirmed live: this exact interleaving (a scout-phase death's restart request immediately
+	-- followed by exit_to_menu) crashed with the screenwipe nil error this comment warns about.
+	if pending.lobby ~= MPAPI.get_current_lobby() then
+		return
+	end
 	-- §end-screen stats: fold the ending run's best hand into the match-wide
 	-- max before start_run wipes G.GAME.round_scores -- covers every
 	-- transition except the one that ends the match outright (that path
@@ -60,6 +76,27 @@ function SPDRN._check_pending_run_transition()
 	-- just this run rather than the whole match's elapsed time.
 	SPDRN.reset_current_run_timer()
 	pending.instance:start_run(pending.deck, pending.seed)
+end
+
+-- G.FUNCS.go_to_menu is vanilla's own run-exit chokepoint (MPAPI.exit_to_menu calls it
+-- directly, and it's also reachable via the in-run pause menu's own Quit button) -- it queues
+-- its own teardown/wipe events and does NOT flip G.STAGE away from RUN synchronously (confirmed
+-- live: G.STAGE still reads RUN immediately after this call returns, and takes several frames to
+-- actually become MENU). A _pending_run_transition queued moments earlier (e.g. Seed Scout's
+-- on_run_lost restart) has no idea this exit is happening and would otherwise still fire on the
+-- very next Game:update tick, calling G.FUNCS.start_run WHILE go_to_menu's own teardown events
+-- are still draining -- the exact EventManager-mutation-during-iteration hazard described above,
+-- confirmed live to crash with the same screenwipe nil error. The lobby-identity check in
+-- _check_pending_run_transition above does NOT catch this case: this instance's own
+-- MPAPI.exit_to_menu()/go_to_menu() call never touches MPAPI.get_current_lobby() (only
+-- MPAPI.join_lobby, for a genuinely new match, does that) -- e.g. this exact crash reproduces
+-- from a bare exit-to-menu with no new lobby involved at all. Clearing the pending state here,
+-- before go_to_menu's own teardown starts, removes it before there's anything left to race.
+local _go_to_menu_ref = G.FUNCS.go_to_menu
+G.FUNCS.go_to_menu = function(e)
+	SPDRN._pending_run_transition = nil
+	SPDRN._pending_dollars_override = nil
+	return _go_to_menu_ref(e)
 end
 
 -- Start (or restart) a Balatro run safely: tear down the current run first, then start fresh on
