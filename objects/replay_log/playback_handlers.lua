@@ -317,19 +317,38 @@ end)
 -- Pack's playing-card pick, or a joker later sold/discarded elsewhere) must
 -- be learned here too, or a later "already-seen" reference to it elsewhere
 -- permanently fails to resolve.
-local function register_own_ref(ctx, ref, card)
-	if ctx.card_resolver and ref and card then
-		MPAPI.replay.resolve_card_ref(ctx.card_resolver, ref, { card })
+-- Resolves the PRIMARY card an opcode acts on (not a hand-target -- see
+-- highlight_resolved_hand_indices for that) by identity when a ref was
+-- recorded, falling back to the plain positional lookup only when there's no
+-- ref at all (pre-existing recordings). Confirmed live: sell/buy/use/pack_pick
+-- used to resolve their own card purely by area.cards[idx] (only registering
+-- the ref for OTHER opcodes' future lookups, never using it for their own
+-- resolution) -- if that area's order has drifted even slightly from an
+-- earlier, unrelated divergence (a different purchase/use order shifting
+-- positions), this silently acted on a COMPLETELY DIFFERENT card than the one
+-- actually recorded. Traced live to a real production match: a `use` resolved
+-- the wrong Tarot card by position, which then converted a target playing
+-- card to the wrong suit -- surfacing several opcodes later as a totally
+-- unrelated-looking "wrong card dealt" desync warning.
+local function resolve_own_card(ctx, ref, area, idx, opcode)
+	if not ref then
+		return area and area.cards and area.cards[idx]
 	end
+	local resolver = ctx.card_resolver
+	local card = resolver and MPAPI.replay.resolve_card_ref(resolver, ref, area and area.cards or {})
+	if not card then
+		MPAPI.sendWarnMessage(
+			'[replay] ' .. tostring(opcode) .. ': could not resolve this action\'s own card ref -- replay has desynced from the recording, skipping this action'
+		)
+	end
+	return card
 end
 
 MPAPI.playback.register_handler('spdrn', 'sell', function(args, ctx)
 	if not ctx.is_pov then return end
 	local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
-	local area = area_object(area_id)
-	local card = area and area.cards and area.cards[idx]
+	local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'sell')
 	if card then
-		register_own_ref(ctx, ref, card)
 		card:sell_card()
 		SMODS.calculate_context({ selling_card = true, card = card })
 	end
@@ -337,18 +356,16 @@ end)
 
 -- buy/open_pack/voucher all draw their card from a SHOP area (shop_jokers/
 -- shop_booster/shop_vouchers, per area_object above) -- gated on with_shop_ready
--- for the same reason reroll is below, since resolving `area.cards[idx]`
--- against a not-yet-populated shop area would silently pick the wrong (or no)
--- card, same class of hazard as the hand-card resolution fix elsewhere in this
--- file, just for the shop instead of the hand.
+-- for the same reason reroll is below, since resolving against a not-yet-
+-- populated shop area would silently pick the wrong (or no) card, same class
+-- of hazard as the hand-card resolution fix elsewhere in this file, just for
+-- the shop instead of the hand.
 local function replay_buy(args, ctx)
 	if not ctx.is_pov then return end
 	with_shop_ready(ctx, function()
 		local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
-		local area = area_object(area_id)
-		local card = area and area.cards and area.cards[idx]
+		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
 		if card then
-			register_own_ref(ctx, ref, card)
 			G.FUNCS.buy_from_shop({ config = { ref_table = card } })
 		end
 	end)
@@ -360,9 +377,8 @@ MPAPI.playback.register_handler('spdrn', 'voucher', replay_buy)
 MPAPI.playback.register_handler('spdrn', 'use', function(args, ctx)
 	if not ctx.is_pov then return end
 	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
-	local card = G.consumeables and G.consumeables.cards and G.consumeables.cards[idx]
+	local card = resolve_own_card(ctx, ref, G.consumeables, idx, 'use')
 	if not card then return end
-	register_own_ref(ctx, ref, card)
 	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'use') end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
@@ -370,9 +386,8 @@ end)
 MPAPI.playback.register_handler('spdrn', 'pack_pick', function(args, ctx)
 	if not ctx.is_pov then return end
 	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
-	local card = G.pack_cards and G.pack_cards.cards and G.pack_cards.cards[idx]
+	local card = resolve_own_card(ctx, ref, G.pack_cards, idx, 'pack_pick')
 	if not card then return end
-	register_own_ref(ctx, ref, card)
 	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'pack_pick') end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
