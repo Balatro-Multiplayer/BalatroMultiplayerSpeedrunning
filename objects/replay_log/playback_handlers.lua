@@ -36,6 +36,45 @@ local function highlight_hand_indices(indices)
 	end
 end
 
+-- Resolves recorded hand-card references back to live Card objects via
+-- MPAPI.replay.resolve_card_ref (identity, immune to reordering/reshuffling)
+-- when `refs` was recorded, falling back to the plain positional lookup above
+-- only when there's no ref for a slot (recordings predating played_refs/
+-- discarded_refs/target_refs). This mirrors the same fix in MPAPI's own
+-- api/replay/generic_codes.lua -- see that file's comment for the full
+-- rationale -- duplicated here because register_handler('spdrn', ...) below
+-- overwrites MPAPI's generic RLOG_CODE.replay baseline entirely (see that
+-- file's own header comment on "a later register_handler call... simply
+-- overwrites this one"), so SPDRN's actual playback path never runs MPAPI's
+-- version at all. Confirmed live: this exact gap crashed replaying a real,
+-- flagged (hash_mismatch) production SPDRN match -- a stale positional index
+-- fed a malformed card selection into play_cards_from_highlighted, which
+-- crashed deep in vanilla's evaluate_play (functions/state_events.lua:589,
+-- "attempt to index a nil value" in the retrigger loop). A ref that fails to
+-- resolve means this replay has ALREADY desynced -- skip that card and warn
+-- loudly, never fall back to the very position that just proved unreliable.
+local function highlight_resolved_hand_indices(indices, refs, ctx, opcode)
+	local resolver = ctx and ctx.card_resolver
+	for i, idx in ipairs(indices or {}) do
+		local ref = refs and refs[i]
+		local card
+		if ref then
+			if resolver then
+				card = MPAPI.replay.resolve_card_ref(resolver, ref, G.hand.cards)
+			end
+			if not card then
+				MPAPI.sendWarnMessage(
+					'[replay] ' .. tostring(opcode) .. ': could not resolve hand card ref for index '
+						.. tostring(idx) .. ' -- replay has desynced from the recording, skipping this card'
+				)
+			end
+		else
+			card = G.hand.cards[idx]
+		end
+		if card then G.hand:add_to_highlighted(card) end
+	end
+end
+
 MPAPI.playback.register_handler('spdrn', 'manifest', function(_args, _ctx) end)
 MPAPI.playback.register_handler('spdrn', 'end', function(_args, _ctx) end)
 MPAPI.playback.register_handler('spdrn', 'chk', function(_args, _ctx) end)
@@ -72,17 +111,17 @@ end)
 
 MPAPI.playback.register_handler('spdrn', 'play', function(args, ctx)
 	if not ctx.is_pov then return end
-	local indices = args and args[1]
+	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
-	highlight_hand_indices(indices)
+	highlight_resolved_hand_indices(indices, refs, ctx, 'play')
 	G.FUNCS.play_cards_from_highlighted()
 end)
 
 MPAPI.playback.register_handler('spdrn', 'discard', function(args, ctx)
 	if not ctx.is_pov then return end
-	local indices = args and args[1]
+	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
-	highlight_hand_indices(indices)
+	highlight_resolved_hand_indices(indices, refs, ctx, 'discard')
 	G.FUNCS.discard_cards_from_highlighted(nil, false)
 end)
 
@@ -112,19 +151,19 @@ MPAPI.playback.register_handler('spdrn', 'voucher', replay_buy)
 
 MPAPI.playback.register_handler('spdrn', 'use', function(args, ctx)
 	if not ctx.is_pov then return end
-	local idx, targets = args and args[1], args and args[2]
+	local idx, targets, _ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
 	local card = G.consumeables and G.consumeables.cards and G.consumeables.cards[idx]
 	if not card then return end
-	if targets then highlight_hand_indices(targets) end
+	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'use') end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 
 MPAPI.playback.register_handler('spdrn', 'pack_pick', function(args, ctx)
 	if not ctx.is_pov then return end
-	local idx, targets = args and args[1], args and args[2]
+	local idx, targets, _ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
 	local card = G.pack_cards and G.pack_cards.cards and G.pack_cards.cards[idx]
 	if not card then return end
-	if targets then highlight_hand_indices(targets) end
+	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'pack_pick') end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 

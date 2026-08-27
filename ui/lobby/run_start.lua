@@ -178,7 +178,7 @@ function SPDRN.begin_run(gamemode_key, decks, seed)
 			players[#players + 1] = { id = p.id, is_host = (p.id == lobby.player_id) and lobby.is_host or false }
 		end
 		local lobby_meta = lobby:get_metadata() or {}
-		MPAPI.RLOGCodes.lobby_info:write(gamemode_key, gamemode_key, players, deck_list, lobby_meta)
+		MPAPI.RLOGCodes.lobby_info:write(gamemode_key, lobby_meta.ruleset, players, deck_list, lobby_meta)
 	end
 
 	-- Client-side run clock (gates the seed-change window) and the deck(s) used for this run

@@ -36,7 +36,24 @@ function SPDRN._start_playback(manifest, on_ready)
 		lobby:set_metadata({
 			gamemode = manifest.gamemode,
 			deck = manifest.deck,
-			ruleset = SPDRN.Ruleset.ORDER,
+			-- Recorded lobby_info's own ruleset field, NOT a hardcoded guess: forcing
+			-- every replay onto ORDER regardless of what the original match actually
+			-- used swaps in the_order.lua's entirely different RNG-consuming hooks
+			-- (create_card/reset_idol_card/pseudoshuffle/etc, api/the_order.lua) from
+			-- round 1 -- confirmed live as the cause of a replay desyncing from its
+			-- own recording almost immediately (wrong cards resolved for play/discard,
+			-- eventually crashing deep in vanilla scoring code). Falls back to ORDER
+			-- only for pre-existing recordings from before lobby_info carried a real
+			-- ruleset value (see run_start.lua's lobby_info:write call, which had its
+			-- own bug passing gamemode_key instead of the real ruleset -- fixed
+			-- alongside this). Validated against the known enum (not just "truthy"):
+			-- recordings made before that fix have the corrupted value (a gamemode
+			-- key, e.g. 'spdrn_white_stake_triple') baked into their stored args
+			-- forever, and it would otherwise pass straight through as a bogus
+			-- ruleset.
+			ruleset = (manifest.ruleset == SPDRN.Ruleset.ORDER or manifest.ruleset == SPDRN.Ruleset.VANILLA)
+					and manifest.ruleset
+				or SPDRN.Ruleset.ORDER,
 			kind = SPDRN.LobbyKind.PRACTICE,
 		})
 		SPDRN.begin_run(manifest.gamemode, manifest.deck, manifest.seed)
