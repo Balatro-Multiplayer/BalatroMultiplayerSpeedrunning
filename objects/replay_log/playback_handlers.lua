@@ -29,13 +29,6 @@ local function area_object(area_id)
 	return nil
 end
 
-local function highlight_hand_indices(indices)
-	for _, i in ipairs(indices or {}) do
-		local card = G.hand.cards[i]
-		if card then G.hand:add_to_highlighted(card) end
-	end
-end
-
 -- Resolves recorded hand-card references back to live Card objects via
 -- MPAPI.replay.resolve_card_ref (identity, immune to reordering/reshuffling)
 -- when `refs` was recorded, falling back to the plain positional lookup above
@@ -93,19 +86,210 @@ local function do_select_blind()
 	G.FUNCS.select_blind({ config = { ref_table = G.P_BLINDS[blind_key] }, UIBox = G.blind_select })
 end
 
+-- Leaving the shop (the "Next Round" button, G.FUNCS.toggle_shop) has no RLOG_CODE
+-- of its own anywhere in this codebase -- it was simply never recorded. A recorded
+-- select_blind/skip_blind opcode can only exist because the real player already
+-- left the shop to reach that screen, so synthesizing the click here (once, only
+-- when actually still in the shop) is safe and correct for every recording,
+-- including every one already stored server-side before this fix existed --
+-- unlike a fix on the recording side, this doesn't need new data to take effect.
+-- Confirmed live: without this, select_blind's own wait_for (below) waits forever
+-- once the driver correctly stops advancing during it (see that fix's own
+-- comment) -- replay would hang at the shop on every single round transition.
+local function leave_shop_if_needed()
+	if G.STATE == G.STATES.SHOP then
+		G.FUNCS.toggle_shop({ config = {} })
+	end
+end
+
+-- Defensive readiness gate for any opcode that touches the shop's own card
+-- areas (reroll/buy/voucher/open_pack/sell). Confirmed live: G.shop_jokers can
+-- read non-nil while G.shop_jokers.cards is itself still nil -- checked once
+-- (in cashout's own wait, above) right after entering the shop is not enough,
+-- since the SAME gap reproduced again later in the SAME shop visit (jokers_
+-- purchased:0 at the crash, i.e. the very first shop action, not necessarily
+-- the one immediately after cash_out -- some OTHER mid-shop event can leave
+-- the area in this same not-quite-ready state momentarily). Every shop-area
+-- opcode gets its own last-moment check rather than trusting an earlier one to
+-- still hold. If already ready, `fn` runs immediately with no driver pause at
+-- all (the overwhelmingly common case) -- only pauses when genuinely caught
+-- mid-gap.
+-- Bounded like select_blind's own hand-dealt wait above: a shop-area opcode
+-- can be dispatched after the replay has ALREADY moved on past that shop
+-- visit entirely (the same "recorded opcode fires later than replay's own
+-- actual progress" class of desync as cashout firing mid-round, elsewhere in
+-- this file) -- in that case G.shop_jokers never becomes ready again and this
+-- would hang the driver forever. Give up after a real-time timeout rather
+-- than waiting indefinitely; the specific action (buy/reroll/etc) just never
+-- happens, which is a strictly better outcome than a permanently stuck
+-- replay.
+local SHOP_READY_TIMEOUT_SECONDS = 10
+local function with_shop_ready(ctx, fn)
+	if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
+		fn()
+		return
+	end
+	local driver = ctx.driver
+	if driver then driver:pause() end
+	local deadline = love.timer.getTime() + SHOP_READY_TIMEOUT_SECONDS
+	SPDRN._playback_wait_for(function()
+		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
+			return true
+		end
+		if love.timer.getTime() >= deadline then
+			MPAPI.sendWarnMessage('[replay] shop never became ready after ' .. SHOP_READY_TIMEOUT_SECONDS .. 's -- giving up on this action and resuming')
+			return true
+		end
+		return false
+	end, function()
+		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
+			fn()
+		end
+		if driver then driver:play() end
+	end)
+end
+
+-- SPDRN._playback_wait_for is its own independent poll (Game:update, see
+-- playback_launch.lua), completely invisible to the Driver's own pacing
+-- (api/playback/driver.lua's _tick, gated on _queues_empty()). Registering a
+-- waiter and returning immediately -- as this used to do -- means the DRIVER
+-- considers this opcode's dispatch already finished (nothing was queued
+-- synchronously), so it advances straight to the NEXT recorded opcode while
+-- the actual blind selection + hand deal haven't happened yet. Confirmed
+-- live: this let a recorded post-blind-select `discard` dispatch while
+-- G.STATE was still SHOP and G.hand.cards was completely empty (0 cards) --
+-- the single biggest source of the "could not resolve hand card ref" desync
+-- warnings seen replaying real production matches, since it happens at every
+-- round transition. Fixed the same way playback_launch.lua's own
+-- _playback_handle_run_transition already handles an equivalent deferred-
+-- wait case: pause the driver first, resume it only once the real action has
+-- actually run.
+-- Second wait phase after actually clicking select/skip blind: the hand deal
+-- itself is a further async step (queues its own blocking events on a LATER
+-- frame, not synchronously within this call) -- resuming the driver as soon
+-- as the click itself returns can dispatch the NEXT recorded opcode (a
+-- reorder/discard/play, expecting a full hand) while G.hand.cards is still
+-- completely empty. Confirmed live: this let a reorder splice garbage into an
+-- empty G.hand.cards, permanently breaking that reorder's own card-identity
+-- registration (see the reorder handler's own comment below) even though the
+-- reorder call itself didn't error -- a quiet data-corruption bug, not a
+-- crash, which is exactly why it went unnoticed until traced back from a
+-- much later "could not resolve" warning.
+-- Confirmed live: the click that selects the blind (do_select_blind/skip_blind)
+-- can silently no-op the very first time it fires here -- reproduced with
+-- G.blind_select's own readiness predicate (offset.x == 0) already true, no
+-- error thrown, yet G.STATE stayed BLIND_SELECT and G.hand stayed empty for
+-- well over the ~0.2s+ vanilla's own select_blind takes internally (it queues
+-- its own delayed events, see functions/button_callbacks.lua's select_blind:
+-- a `trigger='before', delay=0.2` event that touches G.blind_select). Likely a
+-- transient controller/UI lock left over from the blind-select screen's own
+-- entrance animation that the existing readiness check doesn't account for.
+--
+-- Retrying the click is NOT simply idempotent, though: vanilla's select_blind
+-- queues that same delayed event on every call, unconditionally, assuming
+-- G.blind_select will still exist when it fires -- retrying every frame (or
+-- any time a genuinely-successful first click just hasn't finished its own
+-- 0.2s+ deferred chain yet) stacks up multiple overlapping event chains, and
+-- once the FIRST one's own click actually completes and tears down
+-- G.blind_select, every OTHER still-pending chain crashes indexing it as nil.
+-- Confirmed live. Fixed with a real-time cooldown (RETRY_COOLDOWN_SECONDS)
+-- between attempts, giving each click's own deferred chain time to either
+-- finish naturally or prove it's truly stuck before trying again -- not a
+-- frame-count throttle, since frame timing says nothing about vanilla's own
+-- wall-clock delays.
+local SELECT_BLIND_RETRY_LIMIT = 10
+local SELECT_BLIND_RETRY_COOLDOWN_SECONDS = 1.0
+local function wait_for_hand_dealt(driver, retry, callback)
+	local attempts = 0
+	local next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
+	SPDRN._playback_wait_for(function()
+		if G.hand ~= nil and #G.hand.cards > 0 then
+			return true
+		end
+		if love.timer.getTime() < next_retry_at then
+			return false
+		end
+		-- Only re-click while genuinely still ON the blind-select screen: once
+		-- the first click actually took, G.blind_select gets torn down as part
+		-- of leaving that screen, and there's a real (if brief) further gap
+		-- before G.hand is populated -- retrying blindly during that gap calls
+		-- G.FUNCS.select_blind/skip_blind with a now-nil G.blind_select and
+		-- crashes vanilla (see comment above).
+		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+			attempts = attempts + 1
+			if attempts > SELECT_BLIND_RETRY_LIMIT then
+				-- Give up for real: resolve the wait anyway rather than hanging the
+				-- driver forever. Whatever opcode comes next will most likely also
+				-- fail (no hand to act on), but that's an existing, already-handled
+				-- failure mode (see highlight_resolved_hand_indices's own warn-and-
+				-- skip) -- a stuck driver is strictly worse than a few more skipped
+				-- cards.
+				MPAPI.sendWarnMessage('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				return true
+			end
+			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
+			retry()
+		end
+		return false
+	end, callback)
+end
+
+-- Same "recorded opcode fires later than replay's own actual progress" class
+-- of desync as cashout/with_shop_ready elsewhere in this file: a recorded
+-- select_blind/skip_blind can dispatch after the replay has ALREADY moved
+-- past blind-select into real round gameplay (G.STATE == SELECTING_HAND, a
+-- full hand dealt) -- confirmed live. Waiting for G.STATE == BLIND_SELECT
+-- forever in that case hangs the driver permanently, since blind-select
+-- isn't coming back this round. Bounded the same way with_shop_ready is: give
+-- up and resume (skipping this opcode's own action entirely -- there's
+-- nothing sensible to click, we're already past this screen) after a
+-- real-time timeout instead of waiting indefinitely.
+local BLIND_SELECT_SCREEN_TIMEOUT_SECONDS = 10
+local function wait_for_blind_select_screen(driver, on_ready)
+	leave_shop_if_needed()
+	local deadline = love.timer.getTime() + BLIND_SELECT_SCREEN_TIMEOUT_SECONDS
+	SPDRN._playback_wait_for(function()
+		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0 then
+			return true
+		end
+		if love.timer.getTime() >= deadline then
+			MPAPI.sendWarnMessage('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
+			return true
+		end
+		return false
+	end, function()
+		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+			on_ready()
+		elseif driver then
+			driver:play()
+		end
+	end)
+end
+
 MPAPI.playback.register_handler('spdrn', 'select_blind', function(_args, ctx)
 	if not ctx.is_pov then return end
-	SPDRN._playback_wait_for(function()
-		return G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0
-	end, do_select_blind)
+	local driver = ctx.driver
+	if driver then driver:pause() end
+	wait_for_blind_select_screen(driver, function()
+		do_select_blind()
+		wait_for_hand_dealt(driver, do_select_blind, function()
+			if driver then driver:play() end
+		end)
+	end)
 end)
 
 MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
 	if not ctx.is_pov then return end
-	SPDRN._playback_wait_for(function()
-		return G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0
-	end, function()
-		G.FUNCS.skip_blind({ UIBox = G.blind_select })
+	local driver = ctx.driver
+	if driver then driver:pause() end
+	wait_for_blind_select_screen(driver, function()
+		local function do_skip_blind()
+			G.FUNCS.skip_blind({ UIBox = G.blind_select })
+		end
+		do_skip_blind()
+		wait_for_hand_dealt(driver, do_skip_blind, function()
+			if driver then driver:play() end
+		end)
 	end)
 end)
 
@@ -125,25 +309,49 @@ MPAPI.playback.register_handler('spdrn', 'discard', function(args, ctx)
 	G.FUNCS.discard_cards_from_highlighted(nil, false)
 end)
 
+-- Registers a card's OWN identity ref (not a hand-target ref) into the shared
+-- resolver -- sell/buy/use/pack_pick all record one (args[3], previously
+-- unused on replay) for the specific card being acted on. Same rationale as
+-- reorder's own registration above: RLOG.card_ref's id counter is shared
+-- across every opcode, so a card first-referenced here (e.g. a Standard
+-- Pack's playing-card pick, or a joker later sold/discarded elsewhere) must
+-- be learned here too, or a later "already-seen" reference to it elsewhere
+-- permanently fails to resolve.
+local function register_own_ref(ctx, ref, card)
+	if ctx.card_resolver and ref and card then
+		MPAPI.replay.resolve_card_ref(ctx.card_resolver, ref, { card })
+	end
+end
+
 MPAPI.playback.register_handler('spdrn', 'sell', function(args, ctx)
 	if not ctx.is_pov then return end
-	local area_id, idx = args and args[1], args and args[2]
+	local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
 	local area = area_object(area_id)
 	local card = area and area.cards and area.cards[idx]
 	if card then
+		register_own_ref(ctx, ref, card)
 		card:sell_card()
 		SMODS.calculate_context({ selling_card = true, card = card })
 	end
 end)
 
+-- buy/open_pack/voucher all draw their card from a SHOP area (shop_jokers/
+-- shop_booster/shop_vouchers, per area_object above) -- gated on with_shop_ready
+-- for the same reason reroll is below, since resolving `area.cards[idx]`
+-- against a not-yet-populated shop area would silently pick the wrong (or no)
+-- card, same class of hazard as the hand-card resolution fix elsewhere in this
+-- file, just for the shop instead of the hand.
 local function replay_buy(args, ctx)
 	if not ctx.is_pov then return end
-	local area_id, idx = args and args[1], args and args[2]
-	local area = area_object(area_id)
-	local card = area and area.cards and area.cards[idx]
-	if card then
-		G.FUNCS.buy_from_shop({ config = { ref_table = card } })
-	end
+	with_shop_ready(ctx, function()
+		local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
+		local area = area_object(area_id)
+		local card = area and area.cards and area.cards[idx]
+		if card then
+			register_own_ref(ctx, ref, card)
+			G.FUNCS.buy_from_shop({ config = { ref_table = card } })
+		end
+	end)
 end
 MPAPI.playback.register_handler('spdrn', 'buy', replay_buy)
 MPAPI.playback.register_handler('spdrn', 'open_pack', replay_buy)
@@ -151,18 +359,20 @@ MPAPI.playback.register_handler('spdrn', 'voucher', replay_buy)
 
 MPAPI.playback.register_handler('spdrn', 'use', function(args, ctx)
 	if not ctx.is_pov then return end
-	local idx, targets, _ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
+	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
 	local card = G.consumeables and G.consumeables.cards and G.consumeables.cards[idx]
 	if not card then return end
+	register_own_ref(ctx, ref, card)
 	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'use') end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 
 MPAPI.playback.register_handler('spdrn', 'pack_pick', function(args, ctx)
 	if not ctx.is_pov then return end
-	local idx, targets, _ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
+	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
 	local card = G.pack_cards and G.pack_cards.cards and G.pack_cards.cards[idx]
 	if not card then return end
+	register_own_ref(ctx, ref, card)
 	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'pack_pick') end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
@@ -171,27 +381,128 @@ MPAPI.playback.register_handler('spdrn', 'pack_skip', function(_args, ctx)
 	if ctx.is_pov then G.FUNCS.skip_booster({ config = {} }) end
 end)
 
+-- Confirmed live: G.shop_jokers.cards can read nil at the exact moment a
+-- recorded reroll dispatches (even well into an otherwise-normal shop visit,
+-- not just immediately after cash_out), crashing vanilla's own reroll_shop
+-- ("attempt to get length of field 'cards' (a nil value)",
+-- functions/button_callbacks.lua, inside reroll_shop's own deferred
+-- G.E_MANAGER event, per the lovely game-dump).
 MPAPI.playback.register_handler('spdrn', 'reroll', function(_args, ctx)
-	if ctx.is_pov then G.FUNCS.reroll_shop({ config = {} }) end
+	if not ctx.is_pov then return end
+	with_shop_ready(ctx, function()
+		G.FUNCS.reroll_shop({ config = {} })
+	end)
 end)
 
 -- reorder's perm is "new-position -> old-index" (SPDRN.RLOG_UTILS.reorder_permutation):
 -- new_cards[j] = old_cards[perm[j]]. Same direct-splice technique as PvP's
 -- equivalent handler (mirrors vanilla's own sort-button pattern).
+--
+-- `moved` entries are {ref, old_pos, new_pos} (RLOG.card_ref, recorded at write
+-- time in api/replay/generic_codes.lua's CardArea:update hook) for every card
+-- whose position actually changed. RLOG.card_ref's id counter is GLOBAL across
+-- every opcode that ever references a card (play/discard/sell/buy/use/
+-- pack_pick/pack_skip/reorder, all of them) -- a card CAN be first-referenced
+-- here, in a reorder, rather than in a play/discard/use-target. Registering
+-- these refs into ctx.card_resolver (even though the splice below doesn't
+-- itself need identity resolution -- perm is already positional and correct)
+-- keeps the replay's resolver in sync with the recording's own id-space.
+-- Confirmed live: without this, a card whose id was first assigned via a
+-- reorder is never learned by the resolver, so every LATER "already-seen"
+-- reference to that same physical card (an ordinary discard/play, potentially
+-- many rounds later) permanently fails to resolve -- the single largest
+-- source of residual "could not resolve hand card ref" warnings once the
+-- shop/round-transition timing bugs elsewhere in this file were fixed.
+-- Confirmed live: a recorded hand reorder can legitimately fire while the
+-- player is browsing the shop -- vanilla doesn't clear leftover (unplayed)
+-- hand cards on cash_out, they just sit there hidden until the next round's
+-- deal overwrites them, and idly sorting them mid-shop is a real (if
+-- pointless) action a player can take. If replay's OWN hand ended up fully
+-- consumed by the time this fires (e.g. an earlier, unrelated small
+-- divergence caused this round to use one more discard/play than the
+-- original before winning, leaving nothing behind), `old_cards` won't match
+-- `perm`'s expected length -- splicing anyway would write nils into
+-- area.cards (corrupting it for whatever reads it next) and can never
+-- register any of `moved`'s refs correctly. Skip the whole opcode rather than
+-- guess: this is strictly better than a corrupted area, even though it means
+-- any card first-referenced by a skipped reorder stays unresolvable later.
 MPAPI.playback.register_handler('spdrn', 'reorder', function(args, ctx)
 	if not ctx.is_pov then return end
-	local area_id, perm = args and args[1], args and args[2]
+	local area_id, perm, moved = args and args[1], args and args[2], args and args[3]
 	local area = area_object(area_id)
 	if not (area and perm) then return end
 	local old_cards = area.cards
+	if not old_cards or #old_cards < #perm then return end
 	local new_cards = {}
 	for j = 1, #perm do
 		new_cards[j] = old_cards[perm[j]]
 	end
 	area.cards = new_cards
 	if area.set_ranks then area:set_ranks() end
+
+	local resolver = ctx.card_resolver
+	if resolver and moved then
+		for _, entry in ipairs(moved) do
+			local ref, new_pos = entry[1], entry[3]
+			local card = new_pos and new_cards[new_pos]
+			if ref and card then
+				MPAPI.replay.resolve_card_ref(resolver, ref, { card })
+			end
+		end
+	end
 end)
 
+-- Same driver-pacing hazard as select_blind/skip_blind above: cash_out's real
+-- effect is normally the ROUND_EVAL -> SHOP transition, which builds
+-- G.shop_jokers/etc asynchronously (not synchronously within this call) --
+-- without waiting for it, the driver's next dispatched opcode (buy/reroll/
+-- sell/pack_pick/pack_skip targeting the still-nil shop areas) can run before
+-- the shop actually exists. Confirmed live: a replayed reroll crashed with
+-- "attempt to get length of field 'cards' (a nil value)"
+-- (functions/button_callbacks.lua:2925) from exactly this gap.
+--
+-- Accepts either "reached the fully-built shop" (the normal case -- still
+-- gated on G.shop_jokers.cards specifically, not just G.shop_jokers existing:
+-- confirmed live that G.shop_jokers itself can be non-nil (the CardArea
+-- object constructed) while .cards is still nil (not yet populated), and a
+-- reroll dispatched into that gap crashes vanilla's reroll_shop with "attempt
+-- to get length of field 'cards' (a nil value)" -- functions/button_callbacks.lua,
+-- inside reroll_shop's own deferred G.E_MANAGER event, per the lovely
+-- game-dump) OR "left ROUND_EVAL for some state that isn't SHOP at all": a
+-- match-winning cash-out (e.g. clearing the final ante) skips the shop
+-- entirely and goes straight to a win/end-of-run sequence instead -- confirmed
+-- live that a SHOP-only predicate here hangs forever on exactly that cash-out,
+-- since G.STATE never becomes SHOP for it.
+-- Bounded the same way as the other waits in this file: cash_out is the most
+-- reliable of the bunch in practice, but nothing here guarantees the replay
+-- hasn't already drifted past this round entirely -- give up after a
+-- real-time timeout rather than risk hanging forever on an edge case not yet
+-- seen live.
+local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
 MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
-	if ctx.is_pov then G.FUNCS.cash_out({ config = {} }) end
+	if not ctx.is_pov then return end
+	local driver = ctx.driver
+	if driver then driver:pause() end
+	G.FUNCS.cash_out({ config = {} })
+	local deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
+	SPDRN._playback_wait_for(function()
+		if G.STATE == G.STATES.ROUND_EVAL then
+			if love.timer.getTime() >= deadline then
+				MPAPI.sendWarnMessage('[replay] cashout: still in ROUND_EVAL after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
+				return true
+			end
+			return false
+		end
+		if G.STATE == G.STATES.SHOP then
+			if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then return true end
+			if love.timer.getTime() >= deadline then
+				MPAPI.sendWarnMessage('[replay] cashout: shop never became ready after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
+				return true
+			end
+			return false
+		end
+		return true
+	end, function()
+		if driver then driver:play() end
+	end)
 end)
