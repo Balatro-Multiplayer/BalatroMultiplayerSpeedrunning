@@ -31,9 +31,20 @@ local check_pending_run_transition_ref = SPDRN._check_pending_run_transition
 function SPDRN._check_pending_run_transition()
 	local pending = SPDRN._pending_run_transition
 	if pending and RLOG.is_active() then
+		-- pending.deck is NOT always a plain string: Seed Scout's own Ban Pick
+		-- pool items are {key=, stake=} tables, Challenge's are
+		-- {key=, id=, challenge_id=, challenge_name=} tables (see
+		-- objects/gamemodes/seed_scout.lua/challenge.lua's own pool-building
+		-- code). `tostring()`-ing a table produces a non-reproducible memory-
+		-- address string ("table: 0x...") instead of its real content -- record
+		-- the value as-is (RLOG's JSON encode/decode already serializes plain
+		-- tables fine, same as lobby_info's own `decks` field) so replay's
+		-- bootstrap gets back the real deck/stake/challenge identity instead of
+		-- garbage that neither seed_scout.lua's nor challenge.lua's own
+		-- `type(deck_ref) == 'table'` checks can ever match.
 		SPDRN._rlog_pending_run_info = {
 			seed = pending.seed,
-			deck = tostring(pending.deck),
+			deck = pending.deck,
 		}
 	end
 	check_pending_run_transition_ref()
