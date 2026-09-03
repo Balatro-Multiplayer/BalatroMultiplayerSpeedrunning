@@ -66,29 +66,31 @@ function SPDRN._launch_replay(run_id)
 			return
 		end
 
-		SPDRN._start_playback(bootstrap, function()
-			local driver = MPAPI.playback.new_driver(timeline, {
-				mod_id = 'spdrn',
-				pov_player_id = my_id,
-				schema_version = bootstrap.schema_version,
-				on_complete = function()
-					-- No `cover` field: confirmed live to crash
-					-- (functions/UI_definitions.lua's attention_text expects
-					-- a real UI target with its own `.T` transform there, not
-					-- a bare {align=...} table) -- `cover` is optional, so
-					-- omitting it entirely sidesteps that branch rather than
-					-- trying to construct a valid one just for a toast.
-					attention_text({
-						text = 'Replay finished',
-						scale = 1,
-						hold = 3,
-						pos = { x = 0, y = 0 },
-					})
-				end,
-			})
-			driver:finish()
-			driver:play()
-		end)
+		-- SPDRN._open_replay_session (objects/replay_log/ante_seek.lua) owns starting
+		-- playback itself (it needs to boot the run before it can even build the ante index --
+		-- see that function's own comment on why this costs two bootstraps), builds the
+		-- ante-seek index, and lands at ante 1 -- this is the SAME code path a mid-replay ante
+		-- click takes, just seeking to the very beginning.
+		SPDRN._open_replay_session({
+			bootstrap = bootstrap,
+			timeline = timeline,
+			my_id = my_id,
+			on_session_complete = function()
+				-- No `cover` field: confirmed live to crash
+				-- (functions/UI_definitions.lua's attention_text expects
+				-- a real UI target with its own `.T` transform there, not
+				-- a bare {align=...} table) -- `cover` is optional, so
+				-- omitting it entirely sidesteps that branch rather than
+				-- trying to construct a valid one just for a toast.
+				attention_text({
+					text = 'Replay finished',
+					scale = 1,
+					hold = 3,
+					pos = { x = 0, y = 0 },
+				})
+				SPDRN._active_replay_session = nil
+			end,
+		})
 	end)
 end
 

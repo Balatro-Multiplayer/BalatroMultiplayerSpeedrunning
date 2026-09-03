@@ -21,7 +21,14 @@ SPDRN._locations = SPDRN._locations or {}
 -- (Gold Stake Single, Challenge) never set it, so this naturally falls back
 -- to run 1. Guarded for lobbies that don't implement get_gamemode_instance
 -- (the fake lobbies used by this file's own tests).
-local function current_run(lobby)
+--
+-- Promoted from a local to SPDRN.current_run since objects/replay_log/
+-- ante_index.lua and rejoin.lua need the exact same "which run is this,
+-- right now" logic to build a replay/rejoin timeline's per-ante run_idx --
+-- multi-run boundaries (run_died/run_restarted vs. a genuine run advance)
+-- fall out of reading this same _run_count field for free, with no
+-- opcode-specific logic of its own (see ante_index.lua's own comment).
+function SPDRN.current_run(lobby)
 	if not lobby or not lobby.get_gamemode_instance then
 		return 1
 	end
@@ -37,7 +44,7 @@ local function current_location(lobby)
 		return nil
 	end
 	return {
-		run = current_run(lobby),
+		run = SPDRN.current_run(lobby),
 		ante = (G.GAME.round_resets and G.GAME.round_resets.ante) or 1,
 		round = G.GAME.round or 0,
 	}
