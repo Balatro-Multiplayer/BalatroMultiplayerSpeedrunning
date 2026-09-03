@@ -46,7 +46,26 @@ end
 -- "attempt to index a nil value" in the retrigger loop). A ref that fails to
 -- resolve means this replay has ALREADY desynced -- skip that card and warn
 -- loudly, never fall back to the very position that just proved unreliable.
+-- Confirmed live against a real, flagged (hash_mismatch) production match: a
+-- 'play' opcode dispatched while G.hand itself was nil (mid round-transition --
+-- G.hand is torn down and rebuilt across a run restart/new round, not just
+-- emptied like the shop card areas below) crashed here with "attempt to index
+-- field 'hand' (a nil value)" the moment ANY ref needed resolving, before the
+-- existing per-card skip-and-warn logic below even got a chance to run. Same
+-- root cause class as the shop-readiness gate in replay_buy/etc further down
+-- this file (a card area not actually ready yet when a recorded opcode fires),
+-- just for the hand area instead of a shop one -- and unlike those, this one
+-- has no natural "wait for it" moment to gate on (a hand can legitimately not
+-- exist for reasons ranging from mundane timing to a replay that's desynced
+-- itself all the way into the wrong game state), so this skips-and-warns
+-- immediately rather than pausing the driver to retry.
 local function highlight_resolved_hand_indices(indices, refs, ctx, opcode)
+	if not (G.hand and G.hand.cards) then
+		MPAPI.sendWarnMessage(
+			'[replay] ' .. tostring(opcode) .. ': G.hand is not available -- replay has desynced from the recording, skipping this action entirely'
+		)
+		return
+	end
 	local resolver = ctx and ctx.card_resolver
 	for i, idx in ipairs(indices or {}) do
 		local ref = refs and refs[i]
@@ -123,10 +142,14 @@ end
 -- than waiting indefinitely; the specific action (buy/reroll/etc) just never
 -- happens, which is a strictly better outcome than a permanently stuck
 -- replay.
+-- `fn` may return true to take over resuming the driver itself (e.g. buying a
+-- Booster Pack needs a FURTHER wait afterward, for the pack it opens -- see
+-- replay_buy below) -- anything else (including no return at all) resumes
+-- immediately once fn() returns, same as before.
 local SHOP_READY_TIMEOUT_SECONDS = 10
 local function with_shop_ready(ctx, fn)
 	if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-		fn()
+		if not fn() and ctx.driver then ctx.driver:play() end
 		return
 	end
 	local driver = ctx.driver
@@ -142,10 +165,11 @@ local function with_shop_ready(ctx, fn)
 		end
 		return false
 	end, function()
+		local deferred = false
 		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-			fn()
+			deferred = fn()
 		end
-		if driver then driver:play() end
+		if not deferred and driver then driver:play() end
 	end)
 end
 
@@ -234,6 +258,57 @@ local function wait_for_hand_dealt(driver, retry, callback)
 	end, callback)
 end
 
+-- skip_blind's own version of wait_for_hand_dealt above -- NOT a shared call
+-- with select_blind, despite looking like it should be one at a glance (both
+-- just "click the blind-select button and wait for it to take"). Confirmed
+-- live: skip_blind used to reuse wait_for_hand_dealt verbatim, which waits on
+-- `#G.hand.cards > 0` -- a condition skipping a blind never satisfies, since
+-- skipping doesn't deal a hand at all, it just returns to BLIND_SELECT for
+-- the NEXT blind. With no leftover hand cards sitting around from an earlier
+-- round (the common case right after a shop visit fully consumes the hand --
+-- see the reorder handler's own comment on leftover hand cards for the
+-- opposite, non-empty case), that condition can NEVER become true, so every
+-- one of wait_for_hand_dealt's retries fired: the SAME real skip click
+-- (G.FUNCS.skip_blind, via the `retry` callback) got re-invoked up to
+-- SELECT_BLIND_RETRY_LIMIT (10) more times, each one further advancing
+-- G.GAME.blind_on_deck AGAIN -- vanilla's skip_blind has no idempotency
+-- guard against being called on an already-skipped blind. A single recorded
+-- skip (e.g. Big) silently fast-forwarded blind_on_deck several extra steps
+-- past where the recording actually was, so the round REPLAY actually landed
+-- on (whichever blind blind_on_deck happened to land on after ~10 unwanted
+-- extra skips) no longer matched the recording's own Boss-blind round at
+-- all -- surfacing several opcodes later as a totally unrelated-looking
+-- "could not resolve" cascade on that round's use/discard/play, the same
+-- deceptive-distance-from-root-cause failure mode documented on
+-- resolve_own_card above. The correct success signal for a skip is "we're
+-- back at a ready BLIND_SELECT screen for a DIFFERENT blind than before"
+-- (mirroring ctx:skip_blind's own condition in ClaudeControl's own
+-- api/actions.lua), not "a hand got dealt" -- skip_blind never deals one.
+local function wait_for_skip_applied(driver, retry, callback, blind_before)
+	local attempts = 0
+	local next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
+	SPDRN._playback_wait_for(function()
+		if G.GAME.blind_on_deck ~= blind_before and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+			return true
+		end
+		if love.timer.getTime() < next_retry_at then
+			return false
+		end
+		-- Same crash-avoidance guard as wait_for_hand_dealt's own retry gate:
+		-- only re-click while genuinely still on the blind-select screen.
+		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+			attempts = attempts + 1
+			if attempts > SELECT_BLIND_RETRY_LIMIT then
+				MPAPI.sendWarnMessage('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				return true
+			end
+			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
+			retry()
+		end
+		return false
+	end, callback)
+end
+
 -- Same "recorded opcode fires later than replay's own actual progress" class
 -- of desync as cashout/with_shop_ready elsewhere in this file: a recorded
 -- select_blind/skip_blind can dispatch after the replay has ALREADY moved
@@ -283,21 +358,44 @@ MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
 	local driver = ctx.driver
 	if driver then driver:pause() end
 	wait_for_blind_select_screen(driver, function()
+		local blind_before = G.GAME.blind_on_deck
 		local function do_skip_blind()
 			G.FUNCS.skip_blind({ UIBox = G.blind_select })
 		end
 		do_skip_blind()
-		wait_for_hand_dealt(driver, do_skip_blind, function()
+		wait_for_skip_applied(driver, do_skip_blind, function()
 			if driver then driver:play() end
-		end)
+		end, blind_before)
 	end)
 end)
 
+-- Confirmed live against a real, flagged (hash_mismatch) production match: a
+-- recorded play whose EVERY card ref failed to resolve (a full desync, not
+-- just a partial one) left G.hand.highlighted completely empty, but this
+-- still called G.FUNCS.play_cards_from_highlighted() unconditionally --
+-- vanilla has no empty-hand guard on that path (the real UI only ever gets
+-- there via the Play button, which is disabled with nothing highlighted), so
+-- it crashed deep in evaluate_play (functions/state_events.lua:589, "attempt
+-- to index a nil value" on an empty scoring_hand). A PARTIAL resolve (some
+-- but not all cards) is fine to play through as-is -- that's the existing
+-- per-card skip-and-warn behavior in highlight_resolved_hand_indices -- only
+-- the all-failed case needs its own guard here, since vanilla can't handle a
+-- literally empty selection.
 MPAPI.playback.register_handler('spdrn', 'play', function(args, ctx)
 	if not ctx.is_pov then return end
 	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
 	highlight_resolved_hand_indices(indices, refs, ctx, 'play')
+	-- G.hand can be nil here too (highlight_resolved_hand_indices already
+	-- warned and no-opped in that case, above) -- checked via G.hand's own
+	-- presence rather than assuming it survived that call, not just #==0.
+	local highlighted = G.hand and G.hand.highlighted
+	if not highlighted or #highlighted == 0 then
+		if G.hand then
+			MPAPI.sendWarnMessage('[replay] play: no cards resolved out of ' .. #indices .. ' -- replay has desynced from the recording, skipping this play entirely')
+		end
+		return
+	end
 	G.FUNCS.play_cards_from_highlighted()
 end)
 
@@ -306,6 +404,13 @@ MPAPI.playback.register_handler('spdrn', 'discard', function(args, ctx)
 	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
 	highlight_resolved_hand_indices(indices, refs, ctx, 'discard')
+	local highlighted = G.hand and G.hand.highlighted
+	if not highlighted or #highlighted == 0 then
+		if G.hand then
+			MPAPI.sendWarnMessage('[replay] discard: no cards resolved out of ' .. #indices .. ' -- replay has desynced from the recording, skipping this discard entirely')
+		end
+		return
+	end
 	G.FUNCS.discard_cards_from_highlighted(nil, false)
 end)
 
@@ -360,14 +465,56 @@ end)
 -- populated shop area would silently pick the wrong (or no) card, same class
 -- of hazard as the hand-card resolution fix elsewhere in this file, just for
 -- the shop instead of the hand.
+-- Confirmed live: vanilla's own G.FUNCS.buy_from_shop calls
+-- G.FUNCS.check_for_buy_space(c1) unless e.config.id == 'buy_and_use' --
+-- and that check ONLY recognizes Voucher/Enhanced/Default/Joker/consumeable
+-- cards as things it knows how to validate space for. A Booster Pack is none
+-- of those (card.ability.set == 'Booster', card.ability.consumeable is nil),
+-- so the check unconditionally fails and buy_from_shop silently returns
+-- false -- no error, nothing added anywhere -- UNLESS the buy_and_use id is
+-- set, which is how the real "BUY" button on a pack card is actually wired
+-- (functions/UI_definitions.lua). The recorded `open_pack` opcode never
+-- captured this id (it wasn't part of the RLOG_CODE's write shape at all,
+-- and doesn't need to be -- every open_pack IS a Booster Pack purchase by
+-- construction, since that's the opcode key generic_codes.lua's own
+-- buy_from_shop hook chooses specifically because the card's set is
+-- 'Booster'). Every replayed open_pack was therefore silently failing to
+-- buy anything, permanently starving that player's consumeables/pack
+-- pipeline for the rest of the match -- traced live to a real production
+-- match's replay expecting a Booster Pack that no recorded action appeared
+-- to ever add.
+-- buy_and_use's own vanilla implementation opens the pack via a further
+-- G.E_MANAGER-deferred chain (functions/button_callbacks.lua's buy_from_shop,
+-- id == 'buy_and_use' branch calls G.FUNCS.use_card internally, itself async)
+-- -- NOT synchronously within this call. Without waiting for it, the driver
+-- resuming immediately can dispatch the recorded pack_pick that's supposed to
+-- choose from this exact pack before G.pack_cards is actually populated,
+-- same "driver races ahead of an async vanilla operation" hazard as
+-- with_shop_ready itself, select_blind's hand-dealt wait, etc. elsewhere in
+-- this file. Confirmed live. (The original recording also has a separate,
+-- now-redundant `use` opcode for this same purchase -- vanilla's buy_and_use
+-- internally calling use_card gets caught by the SAME hook that records a
+-- normal manual "use" -- which is harmless on replay: by the time it
+-- dispatches the card's already fully consumed by this buy, so it correctly
+-- no-ops via resolve_own_card's own desync warning rather than doing
+-- anything wrong.)
 local function replay_buy(args, ctx)
 	if not ctx.is_pov then return end
+	local driver = ctx.driver
 	with_shop_ready(ctx, function()
 		local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
 		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
-		if card then
-			G.FUNCS.buy_from_shop({ config = { ref_table = card } })
-		end
+		if not card then return false end
+		local is_booster = card.ability and card.ability.set == 'Booster'
+		G.FUNCS.buy_from_shop({ config = { id = is_booster and 'buy_and_use' or nil, ref_table = card } })
+		if not is_booster then return false end
+		if driver then driver:pause() end
+		SPDRN._playback_wait_for(function()
+			return G.pack_cards ~= nil and #G.pack_cards.cards > 0
+		end, function()
+			if driver then driver:play() end
+		end)
+		return true
 	end)
 end
 MPAPI.playback.register_handler('spdrn', 'buy', replay_buy)
@@ -441,13 +588,43 @@ end)
 -- register any of `moved`'s refs correctly. Skip the whole opcode rather than
 -- guess: this is strictly better than a corrupted area, even though it means
 -- any card first-referenced by a skipped reorder stays unresolvable later.
+-- Same guard applies when old_cards is LONGER than perm, not just shorter:
+-- RLOG.reorder_permutation (MPAPI's area_utils.lua) only ever produces a perm
+-- when the recorder's own old/new counts matched exactly, so any mismatch
+-- either direction means this replay has already desynced. An earlier skipped
+-- opcode (a sell/discard/play/use whose own card ref failed to resolve) can
+-- leave extra cards behind that the original recording no longer had at this
+-- point -- splicing against a too-long old_cards silently drops every card
+-- beyond #perm from area.cards (new_cards below is only ever built out to
+-- #perm), the same data loss as the too-short case, just silent instead of
+-- an obvious nil-splice.
 MPAPI.playback.register_handler('spdrn', 'reorder', function(args, ctx)
 	if not ctx.is_pov then return end
 	local area_id, perm, moved = args and args[1], args and args[2], args and args[3]
 	local area = area_object(area_id)
 	if not (area and perm) then return end
 	local old_cards = area.cards
-	if not old_cards or #old_cards < #perm then return end
+	if not old_cards or #old_cards ~= #perm then
+		-- Every OTHER skip-and-recover path in this file (with_shop_ready,
+		-- wait_for_hand_dealt/wait_for_skip_applied, resolve_own_card,
+		-- highlight_resolved_hand_indices, cashout's own timeouts) warns loudly
+		-- when it gives up rather than acting -- this guard used to be the one
+		-- silent exception, which would leave a real desync invisible in the
+		-- lovely log to anyone diagnosing a later "could not resolve" cascade
+		-- (the card(s) this skipped reorder should have registered into
+		-- ctx.card_resolver never get learned, so THEIR eventual failure is
+		-- what actually surfaces, several opcodes later and looking unrelated --
+		-- same deceptive-distance problem documented on resolve_own_card
+		-- above). Warn here too, matching house style.
+		if old_cards then
+			MPAPI.sendWarnMessage(
+				'[replay] reorder: area ' .. tostring(area_id) .. ' has ' .. #old_cards
+					.. ' cards but the recording expected ' .. #perm
+					.. ' -- replay has desynced from the recording, skipping this reorder'
+			)
+		end
+		return
+	end
 	local new_cards = {}
 	for j = 1, #perm do
 		new_cards[j] = old_cards[perm[j]]
