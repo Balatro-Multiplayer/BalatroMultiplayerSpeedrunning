@@ -1,5 +1,10 @@
 -- Shared end-screen button handlers (used by both win and lose screens).
 
+-- See SPDRN._check_run_lost's own comment on the replay-divergent-death fallback below for why
+-- this needs to safely exceed every individual bounded handler wait elsewhere in this codebase
+-- (10s each, playback_handlers.lua's SHOP_READY_TIMEOUT_SECONDS/BLIND_SELECT_SCREEN_TIMEOUT_SECONDS).
+SPDRN.REPLAY_DIVERGENT_DEATH_TIMEOUT_SECONDS = 20
+
 G.FUNCS.spdrn_continue_sp = function()
 	G.FUNCS.exit_overlay_menu()
 	G.SETTINGS.paused = false
@@ -192,6 +197,68 @@ end
 -- trigger) is a loss path -- a genuine win never sets it (win_game() shows its own overlay
 -- from ROUND_EVAL instead).
 function SPDRN._check_run_lost()
+	-- CONFIRMED LIVE BUG, fixed by this guard: while a replay/rejoin driver is actively driving
+	-- (MPAPI.playback._active_drivers non-empty -- the one reliable "a driver, not a real player,
+	-- is in control" signal anywhere in this codebase, already relied on the same way by
+	-- ui/replay/checkpoint_picker.lua's own click handler), this watcher is not just redundant
+	-- with run_died's own opcode-driven recovery (SPDRN._playback_handle_run_transition,
+	-- playback_launch.lua) -- it's actively harmful. Replaying the real recorded actions that
+	-- lead up to a death genuinely re-triggers G.STATE == GAME_OVER for real, so without this
+	-- guard this watcher shows the real "OOPS! Restart Run / Forfeit" overlay a SECOND time
+	-- (independently of, and not coordinated with, run_died's own recovery), including a
+	-- transient/spurious re-trigger observed live during the restart's own async settle (a
+	-- fresh, correctly-restarted BLIND_SELECT screen already visible underneath, with a second
+	-- stale "Defeated By: ERROR" overlay stuck on top of it, no_esc=true, game paused, freezing
+	-- all further dispatch with no recorded opcode left to trigger any recovery for THIS second
+	-- occurrence). Replay has no use for this watcher at all: run_died is already a known,
+	-- recorded fact by the time it's being replayed, never something the viewer needs to be
+	-- asked to Restart/Forfeit -- that choice was already made, historically, by the original
+	-- player.
+	if next(MPAPI.playback._active_drivers) then
+		-- CONFIRMED LIVE BUG, fixed by the bounded fallback below: the guard above assumes every
+		-- G.STATE == GAME_OVER reached during replay corresponds to a RECORDED run_died opcode
+		-- that's actually still coming later in the timeline, whose own opcode-driven recovery
+		-- (run_died's replay() handler -> SPDRN._playback_handle_run_transition,
+		-- playback_launch.lua) will clear it. That assumption doesn't hold for a death that never
+		-- happened in the ORIGINAL recording: replay resolving a desynced action differently than
+		-- the original player did (a skipped card-ref, a "shop never became ready" give-up, etc --
+		-- see playback_handlers.lua's own desync-tolerance comments) can genuinely die at a point
+		-- the recording never reached. There is no run_died opcode for a death that never happened
+		-- live, so nothing ever dispatches to trigger _playback_handle_run_transition -- and with
+		-- this watcher unconditionally silent whenever a driver is active, NOTHING clears vanilla's
+		-- own native GAME_OVER pause/overlay (independent of SPDRN's lose-screen wiring, already
+		-- showing by the time this function even runs). Permanent freeze: the driver's own _tick
+		-- keeps trying, but G.SETTINGS.paused blocks G.E_MANAGER's queue draining, which
+		-- MPAPI.playback._queues_empty() depends on (same mechanism documented in
+		-- checkpoint_index.lua's header), so it can never dispatch anything further, recorded
+		-- run_died included. Confirmed live via a raw fast-forward sweep of a real production match
+		-- (4bab3028.../41038e0d..., gold_stake_single) -- manually calling exit_overlay_menu() +
+		-- restart_current_run() from outside the frozen driver recovered it instantly, proving no
+		-- opcode-driven recovery was ever going to arrive on its own.
+		--
+		-- Recovered the same way a real player's own "Restart Run" click would (mirroring
+		-- _playback_handle_run_transition's own unconditional-restart choice -- replay has no user
+		-- to ask Restart-vs-Forfeit, see run_transition_codes.lua's own "Known v1 gap" comment on
+		-- that same tradeoff), but only once G.STATE == GAME_OVER has persisted past a bounded
+		-- real-time grace period comfortably longer than any single bounded handler wait elsewhere
+		-- in this codebase (10s each, playback_handlers.lua) -- so a genuinely-recorded death's own
+		-- opcode-driven recovery, which reacts as soon as its opcode dispatches (near-instant, well
+		-- under a second), always wins the race first, and this fallback only ever fires for a
+		-- death that opcode-driven recovery was never coming for in the first place.
+		if G.STATE == G.STATES.GAME_OVER then
+			SPDRN._replay_divergent_death_since = SPDRN._replay_divergent_death_since or love.timer.getTime()
+			if love.timer.getTime() - SPDRN._replay_divergent_death_since > SPDRN.REPLAY_DIVERGENT_DEATH_TIMEOUT_SECONDS then
+				SPDRN._replay_divergent_death_since = nil
+				MPAPI.sendWarnMessage('[replay] reached a death with no recorded run_died to recover it (replay has diverged from the recording) -- restarting the run directly')
+				G.FUNCS.exit_overlay_menu()
+				SPDRN.restart_current_run()
+			end
+		else
+			SPDRN._replay_divergent_death_since = nil
+		end
+		SPDRN._run_lost_shown = false
+		return
+	end
 	if not (MPAPI.is_active(SPDRN.id) and MPAPI.get_current_lobby()) then
 		SPDRN._run_lost_shown = false
 		return

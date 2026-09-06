@@ -78,10 +78,36 @@ function SPDRN._playback_handle_run_transition(_kind, ctx)
 	local driver = ctx.driver
 	if not driver then return end
 	driver:pause()
+	-- CONFIRMED LIVE BUG, fixed by this exit_overlay_menu() call: dispatching the real recorded
+	-- actions that lead up to a run_died is not a simulation of dying -- it IS dying, for real,
+	-- so SPDRN's own live per-frame watcher (SPDRN._check_run_lost, ui/lose_screen.lua) fires
+	-- exactly as it would for a real player and shows the real "OOPS! Restart Run / Forfeit"
+	-- lose-screen overlay, no_esc=true, G.SETTINGS.paused=true. SPDRN.restart_current_run()
+	-- below only resets the underlying run/gamemode state (safe_start_run) -- it does NOT touch
+	-- G.OVERLAY_MENU or G.SETTINGS.paused, unlike the live "Restart Run" button's own handler
+	-- (G.FUNCS.spdrn_restart_run, ui/lose_screen.lua), which explicitly calls exit_overlay_menu()
+	-- before restarting for exactly this reason. Without this call here, that lose-screen overlay
+	-- is left stuck on top forever with the game paused: reproduced live via cctl eval polling a
+	-- real recording's own checkpoint-index-build/restart-seek -- G.SETTINGS.paused=true blocks
+	-- G.E_MANAGER's own queue draining, which MPAPI.playback._queues_empty() (every dispatch
+	-- path's own gate, normal-pace and fast_forward_to's tight loop alike) depends on, so the
+	-- cursor froze permanently at its pre-death value, silently hanging the whole replay/rejoin/
+	-- checkpoint-index-build, not just this one blind. Unconditionally safe to call here: this
+	-- function is exclusively reached from run_died/run_restarted's own .replay() handler
+	-- (run_transition_codes.lua, gated on ctx.is_pov), never from live real-time play, so there
+	-- is no real "Restart Run" click this could ever incorrectly steal from a real player.
+	-- G.FUNCS.exit_overlay_menu() itself already no-ops safely if no overlay is currently up.
+	G.FUNCS.exit_overlay_menu()
 	SPDRN.restart_current_run()
 	SPDRN._playback_wait_for(function()
 		return G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil
 	end, function()
+		-- The exit_overlay_menu() call above may have just dismissed OUR OWN active seek/sync
+		-- overlay instead of a stale lose-screen (same single G.OVERLAY_MENU slot either way) --
+		-- re-show it now, mirroring checkpoint_seek.lua's own SPDRN._reshow_seek_overlay() call
+		-- sites for the identical "a restart wiped some piece of UI state" reason. No-op if no
+		-- seek overlay was active (e.g. this run_died happened to land exactly between seeks).
+		SPDRN._reshow_seek_overlay()
 		driver:play()
 	end)
 end

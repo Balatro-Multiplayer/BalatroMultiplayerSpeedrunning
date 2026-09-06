@@ -70,7 +70,8 @@ function SPDRN._launch_rejoin(active)
 	-- Faster catch-up: fast-forward through as much of the player's own history as safely
 	-- possible, then finish the remaining tail at normal pace before handing off to live play
 	-- -- reusing the exact same session/index/restart machinery "My Replays" uses
-	-- (objects/replay_log/ante_index.lua, ante_seek.lua), not a rejoin-specific reimplementation.
+	-- (objects/replay_log/checkpoint_index.lua, checkpoint_seek.lua), not a rejoin-specific
+	-- reimplementation.
 	--
 	-- Deliberately TWO bootstraps here (SPDRN._start_playback called once to build the ante
 	-- index, again inside _restart_session_and_seek for the real catch-up run), same as
@@ -111,18 +112,21 @@ function SPDRN._launch_rejoin(active)
 	SPDRN._active_replay_session = session
 
 	SPDRN._start_playback(bootstrap, function()
-		SPDRN._build_ante_index(session, function(ante_index)
-			session.ante_index = ante_index
-			local n = #ante_index
-			-- Cutoff = the START of the second-to-last known ante, not literally "now" --
-			-- leaves at least one full ante's worth of real events for the normal-pace tail,
-			-- and lands that tail at a clean shop/blind-select boundary rather than an
-			-- arbitrary mid-hand cutoff, where playback_handlers.lua's own readiness gates
-			-- (with_shop_ready, wait_for_blind_select_screen, etc) are least likely to be
-			-- caught mid-transition. If fewer than 2 ante boundaries exist yet (a very
-			-- short/fresh run), there's nothing meaningful to skip -- replay the whole thing
-			-- at normal pace, same as today.
-			local cutoff = n >= 2 and ante_index[n - 1].event_index or 1
+		SPDRN._build_checkpoint_index(session, function(index)
+			session.checkpoint_index = index
+			-- Cutoff = the START of the second-to-last known ANTE (not blind -- deliberately
+			-- coarser than checkpoint_index.lua's own blind-level granularity, via
+			-- SPDRN._checkpoint_ante_boundaries), not literally "now" -- leaves at least one
+			-- full ante's worth of real events for the normal-pace tail, and lands that tail at
+			-- a clean shop/blind-select boundary rather than an arbitrary mid-hand cutoff, where
+			-- playback_handlers.lua's own readiness gates (with_shop_ready,
+			-- wait_for_blind_select_screen, etc) are least likely to be caught mid-transition.
+			-- If fewer than 2 ante boundaries exist yet (a very short/fresh run), there's
+			-- nothing meaningful to skip -- replay the whole thing at normal pace, same as
+			-- today.
+			local ante_boundaries = SPDRN._checkpoint_ante_boundaries(index)
+			local n = #ante_boundaries
+			local cutoff = n >= 2 and ante_boundaries[n - 1].event_index or 1
 			SPDRN._restart_session_and_seek(session, cutoff, function(driver)
 				session.driver = driver
 				driver:play() -- normal-pace tail from here on -- unchanged existing behavior

@@ -10,15 +10,28 @@ local function format_run_label(run)
 	return date .. '  ' .. tostring(run.lobbyCode or '??????') .. '  [' .. tostring(run.status or '?') .. ']'
 end
 
--- Finds this player's own bootstrap data in an already-built timeline
+-- Finds a given player's own bootstrap data in an already-built timeline
 -- (MPAPI.playback.build_timeline) -- merges the first match_manifest (for
--- schema_version) + first lobby_info (gamemode/ruleset) + first run_info
--- (seed/deck/stake) event, replacing the old single 'manifest' event's args
--- now that match framing is split across three events fired at three
--- different scopes (see BalatroMultiplayerAPI/api/replay/framing_codes.lua).
--- Returns the same {seed, deck, gamemode, ...} shape SPDRN._start_playback
--- already expects, plus schema_version for the compatibility gate below.
-local function find_bootstrap(timeline, player_id)
+-- schema_version + start_epoch_ms) + first lobby_info (gamemode/ruleset) + first run_info
+-- (seed/deck/stake) event BELONGING TO player_id, replacing the old single 'manifest' event's
+-- args now that match framing is split across three events fired at three different scopes
+-- (see BalatroMultiplayerAPI/api/replay/framing_codes.lua). Returns the same
+-- {seed, deck, gamemode, ...} shape SPDRN._start_playback already expects, plus schema_version
+-- for the compatibility gate below.
+--
+-- Exposed as SPDRN._find_bootstrap (not local) since objects/replay_log/perspective_switch.lua
+-- and ui/replay/checkpoint_picker.lua both need to find a DIFFERENT player's own bootstrap from
+-- the same shared timeline, not just the current player's -- every player in an SPDRN match
+-- shares one seed/deck/stake per run (SPDRN.broadcast_start, ui/lobby/run_start.lua), so a
+-- different player's bootstrap has identical seed/deck/stake/gamemode/ruleset, just their own
+-- schema_version/start_epoch_ms (each client records its own copy of these, independently).
+--
+-- start_epoch_ms (a real os.time()*1000 wall-clock epoch, captured synchronously with that
+-- player's own t=0 -- api/replay/framing_codes.lua) is what perspective_switch.lua uses to
+-- align "the same real point in time" across two different players' own independently-clocked
+-- `t` fields -- see that file's own header comment for why raw `t` isn't directly comparable
+-- across players.
+function SPDRN._find_bootstrap(timeline, player_id)
 	local bootstrap = {}
 	local found = {}
 	for _, entry in ipairs(timeline) do
@@ -26,6 +39,7 @@ local function find_bootstrap(timeline, player_id)
 			if not found.match_manifest and entry.opcode == 'match_manifest' then
 				found.match_manifest = true
 				bootstrap.schema_version = entry.args.schema_version
+				bootstrap.start_epoch_ms = entry.args.start_epoch_ms
 			elseif not found.lobby_info and entry.opcode == 'lobby_info' then
 				found.lobby_info = true
 				bootstrap.gamemode = entry.args.gamemode
@@ -53,7 +67,7 @@ function SPDRN._launch_replay(run_id)
 		local timeline = MPAPI.playback.build_timeline(data.logs)
 		local conn = MPAPI.get_connection()
 		local my_id = conn and conn.player_id
-		local bootstrap = find_bootstrap(timeline, my_id)
+		local bootstrap = SPDRN._find_bootstrap(timeline, my_id)
 		if not bootstrap then
 			SPDRN.sendWarnMessage('[replay] no bootstrap data found for our own player in run ' .. tostring(run_id))
 			return
@@ -66,11 +80,13 @@ function SPDRN._launch_replay(run_id)
 			return
 		end
 
-		-- SPDRN._open_replay_session (objects/replay_log/ante_seek.lua) owns starting
-		-- playback itself (it needs to boot the run before it can even build the ante index --
-		-- see that function's own comment on why this costs two bootstraps), builds the
-		-- ante-seek index, and lands at ante 1 -- this is the SAME code path a mid-replay ante
-		-- click takes, just seeking to the very beginning.
+		-- SPDRN._open_replay_session (objects/replay_log/checkpoint_seek.lua) owns starting
+		-- playback itself (it needs to boot the run before it can even build the checkpoint
+		-- index -- see that function's own comment on why this costs two bootstraps), builds
+		-- the checkpoint index, and lands at event_index 1 (ante 1's Small Blind) -- this is
+		-- the SAME code path a mid-replay checkpoint click, or a perspective switch, takes,
+		-- just targeting the very beginning.
+		SPDRN._show_seek_overlay('Seeking to Ante 1...')
 		SPDRN._open_replay_session({
 			bootstrap = bootstrap,
 			timeline = timeline,
