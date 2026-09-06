@@ -26,6 +26,12 @@ return {
 			k_stat_best_run_time = 'Best Run Time',
 			k_stat_times_skipped = 'Times Skipped',
 			k_stat_best_hand = 'Best Hand',
+			-- Hover tooltip on the Find Game menu's Ranked section while it's greyed
+			-- out (ui/main_menu/find_game.lua's queue_section) -- SPDRN._ranked_queue_available()
+			-- is a bare boolean (MPAPI.is_launcher_verified()), so this covers every
+			-- reason it can be false (no BET, Casual launch, or verification still
+			-- pending) with one honest, generic explanation rather than guessing which.
+			k_ranked_launcher_required_cap = "Launch the game via the launcher's Ranked mode to queue for Ranked",
 		},
 	},
 }

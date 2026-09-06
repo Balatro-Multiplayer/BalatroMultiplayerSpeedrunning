@@ -83,16 +83,30 @@ end
 -- white_gm/gold_gm are the exact game_mode strings the server's queue-counts response
 -- uses (i.e. already carrying the "ranked:" prefix for a ranked section) -- see
 -- objects/matchmaking/queue.lua's own game_mode construction, which this must match.
-local function queue_section(label, white_gm, white_btn, gold_gm, gold_btn, enabled)
+--
+-- `disabled_reason`, when set, attaches a hover tooltip explaining why to the section's
+-- own container rather than to the individual buttons: build_stat_button sets
+-- `hover = enabled`, so a disabled button never collides with the cursor and a tooltip
+-- on it would never fire. The outer column keeps its own hover collision regardless of
+-- button state, so the reason is still reachable by hovering the greyed-out section.
+local function queue_section(label, white_gm, white_btn, gold_gm, gold_btn, enabled, disabled_reason)
 	local white_el = MPAPI.ui_element(function() return { nodes = { build_stat_button(white_btn, { 'White Stake', 'Triple' }, white_gm, G.C.ETERNAL, enabled) } } end)
 	local gold_el = MPAPI.ui_element(function() return { nodes = { build_stat_button(gold_btn, { 'Gold Stake', 'Single' }, gold_gm, G.C.GOLD, enabled) } } end)
 
 	_count_els[white_gm] = white_el
 	_count_els[gold_gm] = gold_el
 
+	local show_tooltip = not enabled and disabled_reason ~= nil
 	return {
 		n = G.UIT.C,
-		config = { align = 'cm', padding = 0.1, r = 0.2, colour = G.C.BLACK },
+		config = {
+			align = 'cm',
+			padding = 0.1,
+			r = 0.2,
+			colour = G.C.BLACK,
+			hover = show_tooltip,
+			tooltip = show_tooltip and { text = { disabled_reason } } or nil,
+		},
 		nodes = {
 			{ n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
 				white_el.node,
@@ -140,7 +154,7 @@ G.FUNCS.spdrn_find_game = function()
 				config = { align = 'cm', padding = 0.1 },
 				nodes = {
 					{ n = G.UIT.C, config = { align = 'cm', padding = 0.1 }, nodes = {
-						queue_section(localize('k_ranked_cap'), SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, 'spdrn_queue_ranked_white', SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE, 'spdrn_queue_ranked_gold', SPDRN._ranked_queue_available()),
+						queue_section(localize('k_ranked_cap'), SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.WHITE_STAKE_TRIPLE, 'spdrn_queue_ranked_white', SPDRN.LobbyKind.RANKED_PREFIX .. SPDRN.Gamemode.GOLD_STAKE_SINGLE, 'spdrn_queue_ranked_gold', SPDRN._ranked_queue_available(), localize('k_ranked_launcher_required_cap')),
 					} },
 					{ n = G.UIT.C, config = { align = 'cm', padding = 0.1 }, nodes = {
 						queue_section(localize('k_casual_cap'), SPDRN.Gamemode.WHITE_STAKE_TRIPLE, 'spdrn_queue_casual_white', SPDRN.Gamemode.GOLD_STAKE_SINGLE, 'spdrn_queue_casual_gold', true),
