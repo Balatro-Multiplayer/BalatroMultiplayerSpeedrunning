@@ -75,6 +75,24 @@ function SPDRN._check_pending_run_transition()
 	-- match) gets its own start timestamp, so record_run_completed measures
 	-- just this run rather than the whole match's elapsed time.
 	SPDRN.reset_current_run_timer()
+	-- Diagnostic only (replay-only, see BalatroMultiplayerAPI/api/the_order.lua's own
+	-- "Diagnostics" section for the matching entry/exit logging this pairs with): a real,
+	-- reproducible, CPU-pegged freeze was found starting right around this call during replay
+	-- of a real match (Ghost Deck/stake 8/Misprint/Hex). Logging the state going into
+	-- start_run -- which runs vanilla's Game:start_run synchronously, still inside this same
+	-- Game:update tick -- gives a future recurrence something to correlate against instead of
+	-- just a bare "it froze here."
+	if next(MPAPI.playback._active_drivers) then
+		local used_vouchers = 0
+		for _ in pairs((G.GAME and G.GAME.used_vouchers) or {}) do
+			used_vouchers = used_vouchers + 1
+		end
+		MPAPI.sendWarnMessage(
+			'[diagnostic] entering start_run: seed=' .. tostring(pending.seed)
+				.. ' deck=' .. tostring(pending.deck)
+				.. ' used_vouchers=' .. tostring(used_vouchers)
+		)
+	end
 	pending.instance:start_run(pending.deck, pending.seed)
 end
 
