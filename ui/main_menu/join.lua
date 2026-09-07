@@ -1,4 +1,18 @@
+-- CONFIRMED LIVE BUG, fixed by capturing this table directly: create_UIBox_generic_options
+-- wraps create_text_input's node in a way that leaves config.ref_table nil on the node
+-- get_UIE_by_ID(id) resolves back later -- the confirm button used to re-fetch the node by
+-- id and read code.config.ref_table.text off of it, which is always nil under this wrapper
+-- (reproduced live: the typed code still renders correctly on screen -- create_text_input
+-- itself writes into THIS SAME table -- but get_UIE_by_ID's returned node's own
+-- .config.ref_table field is nil regardless of input method), so "Join Lobby" silently
+-- no-opped on every valid code with no error shown. Capturing the table by closure instead
+-- of re-deriving it from the node tree sidesteps whatever create_UIBox_generic_options does
+-- to that field, since it's the same physical table object create_text_input mutates either
+-- way. See BalatroMultiplayerPvP/ui/pvp_main_menu.lua's mp_pvp_join_lobby_by_code for the
+-- same fix against the same copied pattern.
+local spdrn_lobby_code_ref = { text = '' }
 G.FUNCS.spdrn_join_lobby_by_code = function()
+	spdrn_lobby_code_ref.text = ''
 	G.FUNCS.overlay_menu({
 		definition = create_UIBox_generic_options({
 			snap_back = true,
@@ -18,7 +32,7 @@ G.FUNCS.spdrn_join_lobby_by_code = function()
 							n = G.UIT.R,
 							config = { align = 'cm', padding = 0.1 },
 							nodes = {
-								create_text_input({ id = 'spdrn_lobby_code_input', ref_table = { text = '' }, ref_value = 'text', prompt_text = localize('k_lobby_code_cap'), max_length = 6, all_caps = true, w = 4, h = 0.6 }),
+								create_text_input({ id = 'spdrn_lobby_code_input', ref_table = spdrn_lobby_code_ref, ref_value = 'text', prompt_text = localize('k_lobby_code_cap'), max_length = 6, all_caps = true, w = 4, h = 0.6 }),
 							},
 						},
 						{
@@ -36,14 +50,11 @@ G.FUNCS.spdrn_join_lobby_by_code = function()
 end
 
 G.FUNCS.spdrn_join_lobby_confirm = function()
-	local code = G.OVERLAY_MENU and G.OVERLAY_MENU:get_UIE_by_ID('spdrn_lobby_code_input')
-	if code and code.config and code.config.ref_table then
-		local text = code.config.ref_table.text or ''
-		text = text:match('^%s*(.-)%s*$') or ''
-		if #text > 0 then
-			G.FUNCS.exit_overlay_menu()
-			SPDRN._join_lobby_with_code(text)
-		end
+	local text = spdrn_lobby_code_ref.text or ''
+	text = text:match('^%s*(.-)%s*$') or ''
+	if #text > 0 then
+		G.FUNCS.exit_overlay_menu()
+		SPDRN._join_lobby_with_code(text)
 	end
 end
 
