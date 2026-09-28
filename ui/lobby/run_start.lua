@@ -311,15 +311,37 @@ function SPDRN.broadcast_start(seed)
 	-- client -- the action broadcast itself (below) only ever reaches clients
 	-- connected at the moment it fires, same reasoning as
 	-- MPAPI.BanPick.broadcast_state's own metadata mirror.
-	lobby:set_metadata({ _mp_pending_seed = seed })
+	if not MPAPI.has_server_referee(lobby) then
+		lobby:set_metadata({ _mp_pending_seed = seed })
+	end
 	local action = lobby:action(MPAPI.ActionTypes['spdrn_start_game'])
 	action:broadcast({ seed = seed })
+end
+
+-- A server-refereed lobby's start: the server checks who's ready, picks the seed and
+-- tells everyone (GAME_STARTED -> SPDRN.on_game_start, see ui/lobby/events.lua).
+function SPDRN.request_server_start(lobby)
+	local meta = lobby:get_metadata() or {}
+	local gm = meta.gamemode and MPAPI.GameModes[meta.gamemode]
+	lobby:start_game({
+		stake = tonumber(meta.stake),
+		options = { gamemode = meta.gamemode },
+		min_players = gm and gm:get_min_players('private') or nil,
+	}, function(err)
+		if err then
+			SPDRN.sendWarnMessage('Start refused: ' .. tostring(err.message or err))
+		end
+	end)
 end
 
 -- Host (private) clicks START -> broadcast the start to everyone.
 G.FUNCS.spdrn_start_game = function()
 	local lobby = SPDRN.lobby.ref
 	if not lobby or not lobby.is_host then
+		return
+	end
+	if MPAPI.has_server_referee(lobby) then
+		SPDRN.request_server_start(lobby)
 		return
 	end
 	SPDRN.broadcast_start(SPDRN.generate_seed())

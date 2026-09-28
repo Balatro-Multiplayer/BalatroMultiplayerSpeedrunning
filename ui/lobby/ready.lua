@@ -1,8 +1,17 @@
 -- Broadcast this client's ready state. The host (including itself, via the broadcast
--- loopback) tallies these in the ready tracker.
+-- loopback) tallies these in the ready tracker. A server-refereed lobby keeps ready on
+-- the server instead; its PLAYER_READY_CHANGED feeds the same tally (ui/lobby/events.lua).
 function SPDRN.signal_ready(ready)
 	local lobby = SPDRN.lobby.ref
 	if not lobby then
+		return
+	end
+	if MPAPI.has_server_referee(lobby) then
+		lobby:set_ready(ready, function(err)
+			if err then
+				SPDRN.sendWarnMessage('Ready failed: ' .. tostring(err.message or err))
+			end
+		end)
 		return
 	end
 	local action = lobby:action(MPAPI.ActionTypes['spdrn_player_ready'])

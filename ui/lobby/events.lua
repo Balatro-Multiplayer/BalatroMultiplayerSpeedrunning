@@ -66,6 +66,25 @@ SPDRN.setup_lobby_events = function(lobby)
 		update_game_buttons()
 	end)
 
+	-- Server-refereed lobbies: ready, start and the end of a game come from the server
+	-- rather than from SPDRN's own actions (whose handlers do the same work otherwise).
+	lobby:on(MPAPI.LobbyEvent.PLAYER_READY_CHANGED, function(player_id, ready)
+		if MPAPI.has_server_referee(lobby) then
+			SPDRN.set_player_ready(player_id, ready)
+		end
+	end)
+
+	lobby:on(MPAPI.LobbyEvent.GAME_STARTED, function(started)
+		SPDRN.on_game_start(lobby, { seed = started.seed })
+	end)
+
+	lobby:on(MPAPI.LobbyEvent.GAME_ENDED, function(ended)
+		SPDRN.sendDebugMessage('Game ended: ' .. tostring(ended.status))
+		SPDRN.last_game_ended = ended
+		SPDRN.reset_ready_state()
+		update_game_buttons()
+	end)
+
 	lobby:on('error', function(err)
 		SPDRN.sendWarnMessage('Lobby error: ' .. tostring(err))
 	end)

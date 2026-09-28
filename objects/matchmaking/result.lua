@@ -6,22 +6,17 @@ SPDRN._collected_results = SPDRN._collected_results or {}
 -- §16.8: ranks the winner first, then every other player by furthest ante
 -- (descending), then furthest round within that ante (descending), then by
 -- arrival time at that ante (ascending -- got there sooner outranks got there
--- later). Returns nil until every player currently in the lobby has reported.
-local function build_placements(winner_id)
-	local lobby = MPAPI.get_current_lobby()
-	if not lobby then
-		return nil
-	end
-
+-- later). Returns nil until every player in `player_ids` has reported.
+local function build_placements(winner_id, player_ids)
 	local entries = {}
-	for _, p in ipairs(lobby:get_players()) do
-		local r = SPDRN._collected_results[p.id]
+	for _, id in ipairs(player_ids) do
+		local r = SPDRN._collected_results[id]
 		if not r then
 			return nil
 		end
 		entries[#entries + 1] = {
-			playerId = p.id,
-			is_winner = (p.id == winner_id),
+			playerId = id,
+			is_winner = (id == winner_id),
 			furthest_ante = r.furthest_ante or 1,
 			furthest_round = r.furthest_round or 0,
 			arrived_at = r.arrived_at or 0,
@@ -61,13 +56,57 @@ end
 -- safe for more than one client to independently succeed in calling this for
 -- the same match: every client computes from the same converged
 -- _collected_results, so their placements arrays agree rather than conflict.
+-- Ids of everyone currently in the lobby.
+local function lobby_player_ids(lobby)
+	local ids = {}
+	for _, p in ipairs(lobby:get_players()) do
+		ids[#ids + 1] = p.id
+	end
+	return ids
+end
+
+-- A server-refereed lobby: every client reports the same placements for the
+-- players the game started with, once all of their results are in. A draw
+-- places everyone first. Sent once per game.
+local function report_to_server(lobby, winner_id)
+	local started = lobby._game.started
+	if not started or SPDRN._reported_run_id == started.run_id then
+		return
+	end
+	local ids = {}
+	for _, p in ipairs(started.players or {}) do
+		ids[#ids + 1] = p.id
+	end
+	local placements = build_placements(winner_id, ids)
+	if not placements then
+		return
+	end
+	if SPDRN._match_drawn then
+		for _, entry in ipairs(placements) do
+			entry.place = 1
+		end
+	end
+	SPDRN._reported_run_id = started.run_id
+	lobby:report_result(placements, function(err)
+		if err then
+			SPDRN.sendWarnMessage('report_result error: ' .. tostring(err))
+		end
+	end)
+end
+
 function SPDRN._maybe_report_result(winner_id)
-	local handle = SPDRN._current_match_handle
-	if not handle or not handle.match_id then
+	local lobby = MPAPI.get_current_lobby()
+	if MPAPI.has_server_referee(lobby) then
+		report_to_server(lobby, winner_id)
 		return
 	end
 
-	local placements = build_placements(winner_id)
+	local handle = SPDRN._current_match_handle
+	if not handle or not handle.match_id or not lobby then
+		return
+	end
+
+	local placements = build_placements(winner_id, lobby_player_ids(lobby))
 	if not placements then
 		return
 	end
@@ -89,6 +128,7 @@ function SPDRN.report_match_result(winner_id, opts)
 	opts = opts or {}
 	SPDRN._current_winner_id = winner_id
 	SPDRN._match_result_pending = true
+	SPDRN._match_drawn = opts.draw or nil
 
 	local lobby = MPAPI.get_current_lobby()
 	if not lobby then
@@ -136,7 +176,9 @@ function SPDRN.report_match_result(winner_id, opts)
 		best_hand_amt = progress.best_hand_amt,
 	})
 
-	if not opts.draw then
+	-- A server-refereed lobby needs a result even for a draw: the server ends
+	-- the game once everyone has reported.
+	if not opts.draw or MPAPI.has_server_referee(lobby) then
 		SPDRN._maybe_report_result(winner_id)
 	end
 end

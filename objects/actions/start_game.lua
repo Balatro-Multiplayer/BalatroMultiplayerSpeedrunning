@@ -46,6 +46,57 @@ function SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, seed)
 	end
 end
 
+-- Every client's start of a game: `params.seed` is the match seed. Run off the
+-- spdrn_start_game broadcast (host-refereed lobbies) or off GAME_STARTED
+-- (server-refereed lobbies, see ui/lobby/events.lua) -- the same body either way.
+function SPDRN.on_game_start(lobby, params)
+	local meta = lobby:get_metadata()
+	local gm_def = meta.gamemode and MPAPI.GameModes[meta.gamemode]
+	if not gm_def then
+		SPDRN.sendWarnMessage('spdrn_start_game: unknown gamemode: ' .. tostring(meta.gamemode))
+		return
+	end
+
+	-- decks is meta.deck (string) for the single-deck flow, or the list of survivors
+	-- from the ban-pick draft. begin_run accepts either form.
+	local function proceed(decks)
+		-- Stamp the server-side run start when the run actually begins (after the
+		-- ban-pick + countdown) so the leaderboard time uses the server clock and
+		-- excludes draft time. Self-guards to matchmaking matches (no-op without a
+		-- match handle).
+		if lobby.is_host then
+			SPDRN.mark_run_started()
+		end
+		SPDRN.begin_run(meta.gamemode, decks, params.seed)
+	end
+
+	-- The start has landed; stop the ready re-announce loop.
+	SPDRN.stop_ready_resync()
+
+	if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
+		proceed(meta.deck)
+	elseif gm_def.ban_pick and (SPDRN.is_matchmaking() or gm_def.always_draft) then
+		-- Matchmaking (always 2 players), or any lobby kind for a gamemode that opts into
+		-- always drafting (e.g. All Deck, which needs its draft to decide play order in
+		-- private lobbies too, not just matchmaking): run the deck draft, then the synced
+		-- countdown on the result. Every client runs this off the same broadcast, so the
+		-- draft stays in lockstep. The draft renders inline in the matchmaking lobby
+		-- controls (see build_matchmaking_controls) for matchmaking; private lobbies render
+		-- it the same way via SPDRN.lobby.build_controls's is_matchmaking() branch -- an
+		-- always_draft private lobby is treated as "matchmaking-shaped" for this one screen.
+		MPAPI.BanPick.start(
+			lobby,
+			SPDRN._ban_pick_config_for(gm_def),
+			SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, params.seed)
+		)
+	else
+		-- Private + matchmaking without a draft: synced 5s countdown, single deck.
+		SPDRN.show_countdown(function()
+			proceed(meta.deck)
+		end, meta.deck)
+	end
+end
+
 MPAPI.ActionType({
 	key = 'spdrn_start_game',
 	on_receive = function(action_type, from_player_id, params)
@@ -53,50 +104,6 @@ MPAPI.ActionType({
 		if not lobby then
 			return
 		end
-		local meta = lobby:get_metadata()
-		local gm_def = meta.gamemode and MPAPI.GameModes[meta.gamemode]
-		if not gm_def then
-			SPDRN.sendWarnMessage('spdrn_start_game: unknown gamemode: ' .. tostring(meta.gamemode))
-			return
-		end
-
-		-- decks is meta.deck (string) for the single-deck flow, or the list of survivors
-		-- from the ban-pick draft. begin_run accepts either form.
-		local function proceed(decks)
-			-- Stamp the server-side run start when the run actually begins (after the
-			-- ban-pick + countdown) so the leaderboard time uses the server clock and
-			-- excludes draft time. Self-guards to matchmaking matches (no-op without a
-			-- match handle).
-			if lobby.is_host then
-				SPDRN.mark_run_started()
-			end
-			SPDRN.begin_run(meta.gamemode, decks, params.seed)
-		end
-
-		-- The start has landed; stop the ready re-announce loop.
-		SPDRN.stop_ready_resync()
-
-		if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
-			proceed(meta.deck)
-		elseif gm_def.ban_pick and (SPDRN.is_matchmaking() or gm_def.always_draft) then
-			-- Matchmaking (always 2 players), or any lobby kind for a gamemode that opts into
-			-- always drafting (e.g. All Deck, which needs its draft to decide play order in
-			-- private lobbies too, not just matchmaking): run the deck draft, then the synced
-			-- countdown on the result. Every client runs this off the same broadcast, so the
-			-- draft stays in lockstep. The draft renders inline in the matchmaking lobby
-			-- controls (see build_matchmaking_controls) for matchmaking; private lobbies render
-			-- it the same way via SPDRN.lobby.build_controls's is_matchmaking() branch -- an
-			-- always_draft private lobby is treated as "matchmaking-shaped" for this one screen.
-			MPAPI.BanPick.start(
-				lobby,
-				SPDRN._ban_pick_config_for(gm_def),
-				SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, params.seed)
-			)
-		else
-			-- Private + matchmaking without a draft: synced 5s countdown, single deck.
-			SPDRN.show_countdown(function()
-				proceed(meta.deck)
-			end, meta.deck)
-		end
+		SPDRN.on_game_start(lobby, params)
 	end,
 })

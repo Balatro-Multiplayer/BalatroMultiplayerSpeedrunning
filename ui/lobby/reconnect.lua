@@ -3,6 +3,16 @@
 -- ui/reconnect_prompt.lua) and there's no active RLOG match run to hand off
 -- to instead (that's the OTHER branch of that file's Reconnect handler --
 -- this one only ever runs pre-match: waiting room or mid-ban-pick-draft).
+-- The seed of the game this lobby has started: the server's, restored from the
+-- snapshot, in a server-refereed lobby; otherwise the host's metadata mirror.
+function SPDRN.pending_start_seed(lobby)
+	local started = lobby._game and lobby._game.started
+	if MPAPI.has_server_referee(lobby) and started then
+		return started.seed
+	end
+	return (lobby:get_metadata() or {})._mp_pending_seed
+end
+
 MPAPI.register_lobby_reconnect(SPDRN.id, function(lobby)
 	-- Mirrors ui/main_menu/join.lua / create_lobby.lua / practice.lua's own
 	-- SPDRN._lobby_kind assignment -- every other entry path sets this from
@@ -37,7 +47,7 @@ MPAPI.register_lobby_reconnect(SPDRN.id, function(lobby)
 			MPAPI.BanPick.resume(
 				lobby,
 				SPDRN._ban_pick_config_for(gm_def),
-				SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, meta._mp_pending_seed)
+				SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, SPDRN.pending_start_seed(lobby))
 			)
 		end
 	end
