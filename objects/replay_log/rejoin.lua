@@ -15,8 +15,7 @@
 -- already this player's own buffered stream (server-side getTail against
 -- the live in-memory buffer), so no second fetch is needed at all.
 function SPDRN._launch_rejoin(active)
-	local conn = MPAPI.get_connection()
-	local my_id = conn and conn.player_id
+	local my_id = MPAPI.get_replay_player_id()
 	-- Confirmed live: a connection object can exist (MPAPI.get_connection() non-nil) while its
 	-- own player_id is still unset (e.g. a Steam-auth handshake that hasn't completed) -- every
 	-- timeline entry built below gets player_id = my_id, so a nil my_id here means every entry
