@@ -81,7 +81,7 @@ function SPDRN._join_queue(kind, gamemode_key)
 		-- lobby_ready fires from inside the lobby's own 'connected' handler, so a 'connected'
 		-- listener registered above would never fire. Signal ready now; the host auto-starts
 		-- once every client has reported in. Re-announce a few times in case this first ready
-		-- raced ahead of the peer's actions-topic subscription (else the host can stall).
+		-- raced ahead of the peer joining the match (else the host can stall).
 		SPDRN.signal_ready(true)
 		SPDRN.start_ready_resync()
 	end)

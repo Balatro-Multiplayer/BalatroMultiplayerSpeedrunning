@@ -20,8 +20,8 @@ end
 
 -- Matchmaking safety net for the lobby-join race: re-broadcast our ready a few times over the
 -- first several seconds. Idempotent, and self-terminates once the start broadcast lands or
--- after the attempt cap. Covers the case where the initial ready was published before the peer
--- had subscribed to the actions topic.
+-- after the attempt cap. Covers the case where the initial ready was sent before the peer
+-- had joined the match.
 function SPDRN.start_ready_resync()
 	if not SPDRN.is_matchmaking() then
 		return

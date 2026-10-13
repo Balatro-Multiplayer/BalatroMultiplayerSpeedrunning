@@ -14,10 +14,10 @@ MPAPI.ActionType({
 		end
 
 		-- Lobby-join race fix: a guest's initial ready (sent the instant its lobby is
-		-- ready) can be published before the host has subscribed to the actions topic,
-		-- so the host never sees it and the auto-start stalls. The host->guest direction
-		-- is reliable, so when a guest hears any *peer's* ready it re-announces its own
-		-- once -- by now both ends are subscribed, so the host receives the re-send.
+		-- ready) can be sent before the host has joined the match, so the host never
+		-- sees it and the auto-start stalls. The host->guest direction is reliable, so
+		-- when a guest hears any *peer's* ready it re-announces its own once -- by now
+		-- both ends have joined, so the host receives the re-send.
 		if lobby and not lobby.is_host and SPDRN.is_matchmaking()
 			and from_player_id ~= lobby.player_id and not SPDRN._ready_resent then
 			SPDRN._ready_resent = true

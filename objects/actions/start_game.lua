@@ -38,9 +38,6 @@ function SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, seed)
 		-- tiles show correctly (once resolved past raw {key=...} survivor items,
 		-- see countdown.lua) but silently drop that extra context.
 		SPDRN.show_countdown(function()
-			if lobby.is_host then
-				SPDRN.mark_run_started()
-			end
 			SPDRN.begin_run(meta.gamemode, run_order, seed)
 		end, run_order, gm_def.ban_pick.decorate_tile)
 	end
@@ -60,13 +57,6 @@ function SPDRN.on_game_start(lobby, params)
 	-- decks is meta.deck (string) for the single-deck flow, or the list of survivors
 	-- from the ban-pick draft. begin_run accepts either form.
 	local function proceed(decks)
-		-- Stamp the server-side run start when the run actually begins (after the
-		-- ban-pick + countdown) so the leaderboard time uses the server clock and
-		-- excludes draft time. Self-guards to matchmaking matches (no-op without a
-		-- match handle).
-		if lobby.is_host then
-			SPDRN.mark_run_started()
-		end
 		SPDRN.begin_run(meta.gamemode, decks, params.seed)
 	end
 

@@ -51,20 +51,6 @@ local function build_placements(winner_id, player_ids)
 	return placements
 end
 
--- §11.6: any player may report a match result, not just the host -- tries once
--- per newly-collected result. The server's first-report-wins model makes it
--- safe for more than one client to independently succeed in calling this for
--- the same match: every client computes from the same converged
--- _collected_results, so their placements arrays agree rather than conflict.
--- Ids of everyone currently in the lobby.
-local function lobby_player_ids(lobby)
-	local ids = {}
-	for _, p in ipairs(lobby:get_players()) do
-		ids[#ids + 1] = p.id
-	end
-	return ids
-end
-
 -- A server-refereed lobby: every client reports the same placements for the
 -- players the game started with, once all of their results are in. A draw
 -- places everyone first. Sent once per game.
@@ -94,36 +80,22 @@ local function report_to_server(lobby, winner_id)
 	end)
 end
 
+-- §11.6: every player reports, not just the host -- tried once per newly
+-- collected result. All clients compute from the same converged
+-- _collected_results, so their placements agree. Local lobbies report nothing.
 function SPDRN._maybe_report_result(winner_id)
 	local lobby = MPAPI.get_current_lobby()
 	if MPAPI.has_server_referee(lobby) then
 		report_to_server(lobby, winner_id)
-		return
 	end
-
-	local handle = SPDRN._current_match_handle
-	if not handle or not handle.match_id or not lobby then
-		return
-	end
-
-	local placements = build_placements(winner_id, lobby_player_ids(lobby))
-	if not placements then
-		return
-	end
-
-	handle:report_result(placements, function(err)
-		if err then
-			SPDRN.sendWarnMessage('report_result error: ' .. tostring(err))
-		end
-	end)
 end
 
 -- Called once, when this client's own match involvement ends (it won, it
 -- personally forfeited, or a draw vote resolved -- see objects/actions/player_won.lua
 -- and objects/actions/match_draw.lua's receive handlers): finalizes and broadcasts
 -- its own progress, then checks whether every player has now reported.
--- `opts.draw` (a unanimous draw vote, objects/actions/match_draw.lua) skips the
--- MMR round-trip below -- a drawn match has no winner to rate.
+-- `opts.draw` (a unanimous draw vote, objects/actions/match_draw.lua) places
+-- everyone first.
 function SPDRN.report_match_result(winner_id, opts)
 	opts = opts or {}
 	SPDRN._current_winner_id = winner_id
@@ -176,9 +148,7 @@ function SPDRN.report_match_result(winner_id, opts)
 		best_hand_amt = progress.best_hand_amt,
 	})
 
-	-- A server-refereed lobby needs a result even for a draw: the server ends
-	-- the game once everyone has reported.
-	if not opts.draw or MPAPI.has_server_referee(lobby) then
-		SPDRN._maybe_report_result(winner_id)
-	end
+	-- Reported even for a draw: the server ends the game once everyone has
+	-- reported.
+	SPDRN._maybe_report_result(winner_id)
 end
