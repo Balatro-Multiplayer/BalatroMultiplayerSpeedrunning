@@ -2,9 +2,9 @@
 -- MPAPI's confirmation that the *server* accepted our launcher-integrity
 -- challenge response (see MPAPI.is_launcher_verified() in
 -- api/connection/lifecycle.lua - NOT a client-side-only "did BET answer"
--- check, the actual server verdict). server.joinQueue() enforces this same
--- requirement independently either way (matchmaking.service.ts) - this only
--- avoids sending a request that's going to 403, and gives the player an
+-- check, the actual server verdict). Nakama's ranked queue hook enforces this
+-- same requirement independently either way - this only avoids sending a
+-- request that's going to be refused, and gives the player an
 -- honest button state instead of a click that silently does nothing or
 -- bounces off an error toast. Ranked play itself used to also be gated
 -- behind a separate, always-off SPDRN.RANKED_ENABLED kill switch (a
