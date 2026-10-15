@@ -16,7 +16,9 @@ function SPDRN.decode_deck_string(deck_string)
 	if not deck_string or deck_string == '' then
 		return cards
 	end
-	if not SPDRN._end_screen_deck_area then
+	-- Starting any later run tears down every CardArea (REMOVED, cards = nil),
+	-- this cached one included: emplacing into it then errors, so rebuild it.
+	if not SPDRN._end_screen_deck_area or SPDRN._end_screen_deck_area.REMOVED then
 		SPDRN._end_screen_deck_area = CardArea(-100, -100, G.CARD_W, G.CARD_H, { type = 'deck' })
 	end
 	local area = SPDRN._end_screen_deck_area
