@@ -6,11 +6,16 @@ SPDRN._collected_results = SPDRN._collected_results or {}
 -- §16.8: ranks the winner first, then every other player by furthest ante
 -- (descending), then furthest round within that ante (descending), then by
 -- arrival time at that ante (ascending -- got there sooner outranks got there
--- later). Returns nil until every player in `player_ids` has reported.
-local function build_placements(winner_id, player_ids)
+-- later). Returns nil until every player in `player_ids` has reported, except
+-- those in `gone` (left the lobby or timed out of it mid-game): they will never
+-- report, and are placed below everyone who did.
+local function build_placements(winner_id, player_ids, gone)
 	local entries = {}
 	for _, id in ipairs(player_ids) do
 		local r = SPDRN._collected_results[id]
+		if not r and gone and gone[id] then
+			r = { furthest_ante = -1, furthest_round = -1, arrived_at = math.huge }
+		end
 		if not r then
 			return nil
 		end
@@ -63,7 +68,17 @@ local function report_to_server(lobby, winner_id)
 	for _, p in ipairs(started.players or {}) do
 		ids[#ids + 1] = p.id
 	end
-	local placements = build_placements(winner_id, ids)
+	local seated = {}
+	for _, p in ipairs(lobby:get_players()) do
+		seated[p.id] = true
+	end
+	local gone = {}
+	for _, id in ipairs(ids) do
+		if not seated[id] then
+			gone[id] = true
+		end
+	end
+	local placements = build_placements(winner_id, ids, gone)
 	if not placements then
 		return
 	end

@@ -32,6 +32,15 @@ SPDRN.setup_lobby_events = function(lobby)
 		-- the old roster would otherwise misfire once someone leaves).
 		L.seed_votes:reset()
 		L.draw_votes:reset()
+		-- Leaving mid-run (or timing out of the server's grace period) is a
+		-- forfeit, as in PvP: the gamemode's host-authoritative hook decides
+		-- whether the rest have won. A player who already forfeited through
+		-- spdrn_forfeit was handled there.
+		local inst = lobby:get_gamemode_instance()
+		if inst and inst.on_player_forfeit and G.STAGE == G.STAGES.RUN
+			and not (inst._forfeited and inst._forfeited[player_id]) then
+			MPAPI._handle_gamemode_result(inst, inst:on_player_forfeit(player_id))
+		end
 		update_game_buttons()
 	end)
 
