@@ -11,7 +11,7 @@ SPDRN.SEED_SCOUT_DURATION = 60
 -- uncoordinated with the deck draft and never exposed to the other player at all.
 local function scout_pool(count)
 	local keys = {}
-	for _, center in ipairs(G.P_CENTER_POOLS.Back or {}) do
+	for _, center in ipairs(SPDRN.selectable_backs()) do
 		keys[#keys + 1] = center.key
 	end
 	for i = #keys, 2, -1 do

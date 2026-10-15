@@ -13,12 +13,11 @@
 -- A gamemode needs `count` decks when it plays `count` runs (see SPDRN.required_deck_count):
 -- White Stake Triple is best-of-3, so practice/private must pick three decks up front.
 --
--- The cycle reuses the base G.FUNCS.change_viewed_back callback, which mutates
--- G.GAME.viewed_back in place and refreshes the preview elements (matched by the
--- func = 'RUN_SETUP_check_back*' tags). So the setup below must mirror what
--- run_setup_option prepares (viewed_back, the back-card CardArea, G.sticker_card).
--- In multi mode the cycle is wrapped (spdrn_deck_select_cycle) so the side panel can refresh
--- the "Add/Remove" button for the newly viewed deck.
+-- The cycle (spdrn_deck_select_cycle) does what the base G.FUNCS.change_viewed_back does --
+-- mutates G.GAME.viewed_back in place, and the preview elements (matched by the
+-- func = 'RUN_SETUP_check_back*' tags) refresh from it -- so the setup below must mirror what
+-- run_setup_option prepares (viewed_back, the back-card CardArea, G.sticker_card). In multi
+-- mode it also refreshes the "Add/Remove" button for the newly viewed deck.
 
 local _on_confirm = nil
 -- How many decks the picker requires (1 = single-select, >1 = ordered multi-select).
@@ -27,6 +26,9 @@ local _count = 1
 local _selected = {}
 -- Reactive side panel (multi mode) rebuilt in place on toggle/cycle via :update().
 local _panel_el = nil
+-- The decks the cycle shows, in order (SPDRN.selectable_backs), so a cycle index maps back
+-- to the same deck it names.
+local _backs = {}
 
 -- Resolve any deck ref (display name or center key) to a display name get_deck_from_name
 -- understands. Defaults to Blue Deck.
@@ -55,7 +57,7 @@ local function selected_index(name)
 end
 
 -- Build the back-card preview CardArea and stamp G.sticker_card (mirrors the base
--- run_setup_option setup so change_viewed_back can update the win-sticker in place).
+-- run_setup_option setup so the cycle can update the win-sticker in place).
 local function build_preview_area()
 	local area = CardArea(
 		G.ROOM.T.x + 0.2 * G.ROOM.T.w / 2, G.ROOM.T.h,
@@ -146,8 +148,9 @@ end
 local function build_deck_select_uibox()
 	local area = build_preview_area()
 
+	_backs = SPDRN.selectable_backs()
 	local ordered_names, viewed_deck = {}, 1
-	for k, v in ipairs(G.P_CENTER_POOLS.Back) do
+	for k, v in ipairs(_backs) do
 		ordered_names[#ordered_names + 1] = v.name
 		if v.name == G.GAME.viewed_back.name then
 			viewed_deck = k
@@ -178,13 +181,11 @@ local function build_deck_select_uibox()
 		},
 	}
 
-	-- In multi mode wrap the cycle so the side panel refreshes for the newly viewed deck.
-	local cycle_callback = (_count > 1) and 'spdrn_deck_select_cycle' or 'change_viewed_back'
 	local cycle = {
 		n = G.UIT.R,
 		config = { align = 'cm', minh = 3.8 },
 		nodes = {
-			create_option_cycle({ options = ordered_names, opt_callback = cycle_callback, current_option = viewed_deck, colour = G.C.RED, w = 3.5, mid = preview }),
+			create_option_cycle({ options = ordered_names, opt_callback = 'spdrn_deck_select_cycle', current_option = viewed_deck, colour = G.C.RED, w = 3.5, mid = preview }),
 		},
 	}
 
@@ -240,11 +241,29 @@ function SPDRN.open_deck_select(current_deck, on_confirm, count)
 	G.FUNCS.overlay_menu({ definition = build_deck_select_uibox() })
 end
 
--- Multi mode: cycle the previewed deck (base behaviour) then refresh the side panel so the
--- Add/Remove button reflects the newly viewed deck.
+-- Cycle the previewed deck, then (multi mode) refresh the side panel so the Add/Remove
+-- button reflects the newly viewed deck. Same steps as the base change_viewed_back, but the
+-- deck comes from the list this picker shows: the base callback indexes its own pool, which
+-- other mods filter differently (PvP swaps it while its decks are hidden), so the name in
+-- the cycle and the deck previewed would drift apart.
 G.FUNCS.spdrn_deck_select_cycle = function(args)
-	G.FUNCS.change_viewed_back(args)
-	if _panel_el then
+	local center = _backs[args.to_key]
+	if not center then
+		return
+	end
+	G.GAME.viewed_back:change_to(center)
+	G.PROFILES[G.SETTINGS.profile].MEMORY.deck = args.to_val
+	if G.sticker_card then
+		G.sticker_card.sticker = get_deck_win_sticker(G.GAME.viewed_back.effect.center)
+		for _, card in pairs(G.sticker_card.area.cards) do
+			card.children.back = false
+			local x, y = card.T.x, card.T.y
+			card:set_ability(card.config.center, true)
+			card.children.back.VT.x, card.children.back.VT.y = x, y
+			card.children.center.VT.x, card.children.center.VT.y = x, y
+		end
+	end
+	if _count > 1 and _panel_el then
 		_panel_el:update()
 	end
 end

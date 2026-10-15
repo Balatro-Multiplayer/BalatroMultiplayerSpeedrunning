@@ -34,6 +34,19 @@ function SPDRN.deck_label(meta_deck)
 	return meta_deck or SPDRN.Deck.DEFAULT
 end
 
+-- The decks SPDRN offers, in display order: the same collection pool the base deck picker
+-- cycles through, minus any deck another MPAPI mod keeps to its own matches (PvP's decks
+-- outside a PvP lobby -- MPAPI.should_exclude_from_pool applies that mod's isolation gate).
+function SPDRN.selectable_backs()
+	local backs = {}
+	for _, center in ipairs(SMODS.collection_pool(G.P_CENTER_POOLS.Back)) do
+		if not MPAPI.should_exclude_from_pool(center) then
+			backs[#backs + 1] = center
+		end
+	end
+	return backs
+end
+
 -- Resolve a deck reference to a Back center KEY. Accepts either a center key already (e.g.
 -- 'b_red', as produced by the ban-pick draft) or a display name (e.g. 'Blue Deck', as stored
 -- in lobby metadata). Returns nil if it matches no deck. The deck is applied at run start via
