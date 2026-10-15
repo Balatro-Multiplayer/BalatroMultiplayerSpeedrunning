@@ -20,10 +20,24 @@
 -- sharing one key would get banned together the instant any one of them is
 -- banned -- confirmed live, this is exactly how the original fixed-'b_red'
 -- version soft-locked every draft after its first ban.
+-- A challenge's display name. SMODS challenges have no `name`, only a localized
+-- challenge_names entry keyed by id (vanilla ones have both).
+local function challenge_display_name(c)
+	local name = localize(c.id, 'challenge_names')
+	if name and name ~= 'ERROR' then
+		return name
+	end
+	return c.name or c.id
+end
+
+-- Challenges another MPAPI mod keeps to its own matches (PvP's c_mp_* outside a PvP
+-- lobby) are left out, by the same isolation gate as its decks and jokers.
 local function challenge_pool(count)
 	local indices = {}
-	for i = 1, #G.CHALLENGES do
-		indices[i] = i
+	for i, c in ipairs(G.CHALLENGES) do
+		if not MPAPI.should_exclude_from_pool(c) then
+			indices[#indices + 1] = i
+		end
 	end
 	for i = #indices, 2, -1 do
 		local j = math.random(i)
@@ -32,7 +46,7 @@ local function challenge_pool(count)
 	local pool = {}
 	for i = 1, math.min(count, #indices) do
 		local c = G.CHALLENGES[indices[i]]
-		pool[i] = { key = 'b_challenge', id = c.id, challenge_id = c.id, challenge_name = c.name or c.id }
+		pool[i] = { key = 'b_challenge', id = c.id, challenge_id = c.id, challenge_name = challenge_display_name(c) }
 	end
 	return pool
 end
