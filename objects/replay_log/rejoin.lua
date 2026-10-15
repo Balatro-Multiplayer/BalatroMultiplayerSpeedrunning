@@ -104,7 +104,20 @@ function SPDRN._launch_rejoin(active)
 			-- discovering a new one; must be set before the async connect
 			-- callback fires. Confirmed live: without this, rejoin silently
 			-- exited the just-restored run back to the main menu.
-			if lobby then lobby._skip_run_exit_on_connect = true end
+			if lobby then
+				lobby._skip_run_exit_on_connect = true
+				-- The live lobby replaces the local playback one, which still holds
+				-- SPDRN.lobby.ref and left _lobby_kind on PRACTICE: wire SPDRN's lobby
+				-- events to the real lobby (its result, end screen, votes) and take its
+				-- kind from the server-reported type, as the waiting-room reconnect does
+				-- (ui/lobby/reconnect.lua). Without this the rejoined player got the
+				-- practice end screen (Practice Again) for a lobby game.
+				SPDRN._lobby_kind = SPDRN.LobbyKind.PRIVATE
+				SPDRN.setup_lobby_events(lobby)
+				lobby:on('connected', function()
+					SPDRN._lobby_kind = SPDRN.rejoined_lobby_kind(lobby)
+				end)
+			end
 			SPDRN._active_replay_session = nil
 		end,
 	}

@@ -13,21 +13,25 @@ function SPDRN.pending_start_seed(lobby)
 	return (lobby:get_metadata() or {})._mp_pending_seed
 end
 
-MPAPI.register_lobby_reconnect(SPDRN.id, function(lobby)
-	-- Mirrors ui/main_menu/join.lua / create_lobby.lua / practice.lua's own
-	-- SPDRN._lobby_kind assignment -- every other entry path sets this from
-	-- the button the player actually clicked (Create Private / Find Game /
-	-- Practice); a reconnect has no such click to read, so it's derived from
-	-- the lobby's own server-reported type instead. MPAPI.LobbyType has no
-	-- CASUAL value of its own (only PUBLIC/PRIVATE/RANKED) -- SPDRN's own
-	-- "casual" matchmaking queue is what a plain PUBLIC lobby type means here.
+-- The lobby kind of a lobby rejoined after a restart. Every other entry path
+-- (ui/main_menu/join.lua / create_lobby.lua / practice.lua) sets
+-- SPDRN._lobby_kind from the button the player actually clicked (Create
+-- Private / Find Game / Practice); a reconnect has no such click to read, so
+-- it's derived from the lobby's own server-reported type instead.
+-- MPAPI.LobbyType has no CASUAL value of its own (only PUBLIC/PRIVATE/RANKED)
+-- -- SPDRN's own "casual" matchmaking queue is what a plain PUBLIC lobby type
+-- means here.
+function SPDRN.rejoined_lobby_kind(lobby)
 	if lobby.type == MPAPI.LobbyType.RANKED then
-		SPDRN._lobby_kind = SPDRN.LobbyKind.RANKED
+		return SPDRN.LobbyKind.RANKED
 	elseif lobby.type == MPAPI.LobbyType.PUBLIC then
-		SPDRN._lobby_kind = SPDRN.LobbyKind.CASUAL
-	else
-		SPDRN._lobby_kind = SPDRN.LobbyKind.PRIVATE
+		return SPDRN.LobbyKind.CASUAL
 	end
+	return SPDRN.LobbyKind.PRIVATE
+end
+
+MPAPI.register_lobby_reconnect(SPDRN.id, function(lobby)
+	SPDRN._lobby_kind = SPDRN.rejoined_lobby_kind(lobby)
 
 	SPDRN.setup_lobby_events(lobby)
 
