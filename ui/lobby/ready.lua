@@ -94,6 +94,13 @@ function SPDRN.maybe_autostart()
 	local meta = L.ref:get_metadata()
 	local gm = meta.gamemode and MPAPI.GameModes[meta.gamemode]
 	local min_players = gm and gm:get_min_players('ranked') or 2
+	-- A Nakama matchmade lobby is sized to the matched group (maxPlayers = the
+	-- group): wait for all of it. Starting once the ready players present reach
+	-- the minimum locks out a matched player still joining ("The game has
+	-- already started") and leaves the draft waiting on their turn forever.
+	if MPAPI.has_server_referee(L.ref) and L.ref.max_players then
+		min_players = math.max(min_players, L.ref.max_players)
+	end
 	if #L.ref:get_players() < min_players then
 		return
 	end
@@ -101,6 +108,13 @@ function SPDRN.maybe_autostart()
 		return
 	end
 	L.start_broadcasted = true
+	-- A server-refereed lobby starts on the server, same as the private START button
+	-- (G.FUNCS.spdrn_start_game): a relayed spdrn_start_game would start every client
+	-- without the server ever opening a game, so no run_id, no result report, no rating.
+	if MPAPI.has_server_referee(L.ref) then
+		SPDRN.request_server_start(L.ref)
+		return
+	end
 	SPDRN.broadcast_start(SPDRN.generate_seed())
 end
 
