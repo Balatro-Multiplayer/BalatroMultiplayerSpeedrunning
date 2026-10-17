@@ -92,11 +92,20 @@ function SPDRN._launch_rejoin(active)
 	-- beyond that snapshot by this mechanism -- whatever live re-sync happens after
 	-- MPAPI.join_lobby hands off to real play (unchanged, out of scope here) is what closes any
 	-- remaining gap, exactly as it already does today.
-	local session = {
+	local session
+	session = {
 		bootstrap = bootstrap,
 		timeline = timeline,
 		my_id = my_id,
 		on_session_complete = function()
+			-- The catch-up playback booted its run through SPDRN.begin_run, which opened a
+			-- fresh RLOG block (t from 0, card ids from 1). Its local lobby has no code, so
+			-- nothing recorded during playback -- but once the live lobby below is joined
+			-- that block would record with the wrong clock and ids and close with a CHK over
+			-- the post-rejoin events only, which the server (holding the pre-crash events
+			-- too) reads as tampering: live, the rejoined player's log came back
+			-- hash_mismatch. Close it now, without an END/CHK.
+			MPAPI.replay._run_active = false
 			local lobby = MPAPI.join_lobby(SPDRN.id, active.lobbyCode)
 			-- Opt out of on_lobby_connected's "match formed while practicing,
 			-- exit the run" behavior (api/mod_registry/focus.lua) -- we're
@@ -117,6 +126,23 @@ function SPDRN._launch_rejoin(active)
 				lobby:on('connected', function()
 					SPDRN._lobby_kind = SPDRN.rejoined_lobby_kind(lobby)
 				end)
+				-- Resume the player's real block from the stream just replayed (MPAPI
+				-- RLOG.resume_run: t and card ids carry on, no CHK at the end), once the
+				-- last replayed action's own animations have drained (an event they still
+				-- emit is already in that stream). Same as PvP's lib/rejoin.lua.
+				-- Non-blocking, so it never holds up the queue it waits on.
+				G.E_MANAGER:add_event(Event({
+					blocking = false,
+					blockable = false,
+					no_delete = true,
+					func = function()
+						if not MPAPI.playback._queues_empty() then return false end
+						local driver = session.driver
+						local resolver = driver and driver._card_resolvers and driver._card_resolvers[my_id]
+						MPAPI.replay.resume_run(active.events, resolver and resolver.by_id)
+						return true
+					end,
+				}))
 			end
 			SPDRN._active_replay_session = nil
 		end,
