@@ -32,7 +32,9 @@ function SPDRN.main_menu.create_buttons()
 		label = localize('b_create_lobby_cap'),
 		scale = 0.7,
 		col = true,
-		enabled = MPAPI.is_connected(),
+		enabled = function()
+			return MPAPI.is_connected()
+		end,
 	})
 	b.join_by_code = MPAPI.disableable_button({
 		id = 'spdrn_join_lobby_by_code',
@@ -42,7 +44,9 @@ function SPDRN.main_menu.create_buttons()
 		minh = 0.6,
 		label = { localize('b_by_code_cap') },
 		scale = 0.45,
-		enabled = MPAPI.is_connected(),
+		enabled = function()
+			return MPAPI.is_connected()
+		end,
 	})
 	b.join_from_clipboard = MPAPI.disableable_button({
 		id = 'spdrn_join_lobby_from_clipboard',
@@ -52,7 +56,9 @@ function SPDRN.main_menu.create_buttons()
 		minh = 0.6,
 		label = { localize('b_from_clipboard_cap') },
 		scale = 0.45,
-		enabled = MPAPI.is_connected(),
+		enabled = function()
+			return MPAPI.is_connected()
+		end,
 	})
 	b.practice = MPAPI.disableable_button({
 		id = 'spdrn_practice',
