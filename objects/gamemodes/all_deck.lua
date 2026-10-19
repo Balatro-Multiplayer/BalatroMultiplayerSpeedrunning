@@ -74,7 +74,12 @@ MPAPI.GameMode({
 			local seed = SPDRN.derive_seed(self._base_seed, run_idx)
 			SPDRN.request_run_transition(self, deck, seed)
 		else
-			self._run_count = 0
+			-- The format is over: _run_count stays at the finished total and _finished
+			-- tells SPDRN.current_run the last run is the live one. Every game start
+			-- builds a fresh instance (ui/lobby/run_start.lua), so nothing needs a
+			-- reset, and resetting to 0 here made the winner's last location broadcast
+			-- read "Run 1, Ante 9" on every opponent's Enemy Location.
+			self._finished = true
 			local lobby = MPAPI.get_current_lobby()
 			if not lobby then
 				return

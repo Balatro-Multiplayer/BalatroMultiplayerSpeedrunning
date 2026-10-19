@@ -36,6 +36,11 @@ function SPDRN.current_run(lobby)
 	if not instance then
 		return 1
 	end
+	-- A finished multi-run format (its final run won) has counted that run as
+	-- completed, so the live run is the last one, not one past it.
+	if instance._finished then
+		return math.max(instance._run_count or 1, 1)
+	end
 	return (instance._run_count or 0) + 1
 end
 
