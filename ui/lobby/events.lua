@@ -68,6 +68,13 @@ SPDRN.setup_lobby_events = function(lobby)
 		update_game_buttons()
 	end)
 
+	-- The group queue panel (ui/lobby/group_panel.lua) follows the queue.
+	if MPAPI.LobbyEvent.GROUP_QUEUE then
+		lobby:on(MPAPI.LobbyEvent.GROUP_QUEUE, function()
+			MPAPI.refresh_current_view()
+		end)
+	end
+
 	lobby:on('host_changed', function()
 		if not SPDRN.is_matchmaking() then
 			MPAPI.refresh_current_view()

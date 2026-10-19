@@ -96,6 +96,15 @@ local FIND_GAME_MODES = {
 		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE },
 }
 
+-- The casual entries: what a private lobby may queue as a group
+-- (objects/matchmaking/group_queue.lua).
+SPDRN.GROUP_QUEUE_MODES = {}
+for _, mode in ipairs(FIND_GAME_MODES) do
+	if not mode.ranked then
+		SPDRN.GROUP_QUEUE_MODES[#SPDRN.GROUP_QUEUE_MODES + 1] = mode
+	end
+end
+
 -- Live queue/in-game counts while the find_game intent is open. Started from the page's
 -- on_enter and stopped from its cleanup (see the MPAPI.Page registration in core.lua) -- a
 -- page's own show/leave lifecycle is a simpler, more robust "is this still open" signal than
@@ -275,6 +284,9 @@ end
 local function build_queue_select_button(mode, is_disabled)
 	local el = MPAPI.ui_element(function()
 		local queued = SPDRN._queue_handles[mode.game_mode_stat_key] ~= nil
+		-- No solo queue while this client's lobby is queueing as a group.
+		local Group = MPAPI.matchmaking.group
+		local is_disabled = is_disabled or (Group and Group.is_active and Group.is_active() and not queued)
 		local config = {
 			align = 'cm', minh = 0.5, minw = 2.2, padding = 0.06, r = 0.1,
 			colour = is_disabled and G.C.UI.BACKGROUND_INACTIVE or (queued and G.C.RED or G.C.ORANGE),

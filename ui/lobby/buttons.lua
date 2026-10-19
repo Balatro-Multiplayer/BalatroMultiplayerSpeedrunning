@@ -20,6 +20,10 @@ function SPDRN.lobby.create_buttons()
 			if not lobby or not lobby.is_host then
 				return false
 			end
+			-- Queued as a group: the lobby plays its match elsewhere.
+			if lobby.group_queue then
+				return false
+			end
 			local meta = lobby:get_metadata()
 			local gm = meta.gamemode and MPAPI.GameModes[meta.gamemode]
 			if not gm then
