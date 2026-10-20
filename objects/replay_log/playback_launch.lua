@@ -23,6 +23,7 @@ function SPDRN._start_playback(manifest, on_ready)
 		return
 	end
 
+	SPDRN._drop_playback_waiters()
 	SPDRN._lobby_kind = SPDRN.LobbyKind.PRACTICE
 	local lobby = MPAPI.create_local_lobby(SPDRN.id, { max_players = 1 })
 	if not lobby then
@@ -123,13 +124,27 @@ function SPDRN._playback_wait_for(predicate, callback)
 	SPDRN._playback_waiters[#SPDRN._playback_waiters + 1] = { predicate = predicate, callback = callback }
 end
 
+-- A waiter belongs to the run it was made in: a fresh playback run drops the
+-- rest. Left in, one would act on the new run -- a rejoin's checkpoint-index
+-- pass ends as soon as its last entry is dispatched, so a recording ending on
+-- skip_blind left that skip's retry waiter polling, and it skipped the fresh
+-- run's Small Blind again on top of the real pass's own skip.
+function SPDRN._drop_playback_waiters()
+	SPDRN._playback_waiters = {}
+end
+
 local _playback_launch_update_ref = Game.update
 function Game:update(dt)
 	_playback_launch_update_ref(self, dt)
-	for i = #SPDRN._playback_waiters, 1, -1 do
-		local w = SPDRN._playback_waiters[i]
+	local waiters = SPDRN._playback_waiters
+	for i = #waiters, 1, -1 do
+		-- A callback that started a fresh run dropped the rest of these.
+		if waiters ~= SPDRN._playback_waiters then
+			break
+		end
+		local w = waiters[i]
 		if w.predicate() then
-			table.remove(SPDRN._playback_waiters, i)
+			table.remove(waiters, i)
 			w.callback()
 		end
 	end
