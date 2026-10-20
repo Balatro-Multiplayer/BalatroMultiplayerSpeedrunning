@@ -47,7 +47,9 @@ function SPDRN.group_queue_options(lobby)
 	local facts = Group.facts_from_lobby(lobby)
 	local lobby_refusal = Group.eligibility(facts, nil)
 	local eligible = {}
-	for _, entry in ipairs(Group.rank_modes(facts, SPDRN.group_queue_modes())) do
+	-- A member refused for their standing (MEMBER_REFUSED) still leaves the
+	-- modes listed: the panel greys the button and names them.
+	for _, entry in ipairs(Group.rank_modes(Group.without_standings(facts), SPDRN.group_queue_modes())) do
 		if not entry.refusal then
 			eligible[#eligible + 1] = entry.mode
 		end

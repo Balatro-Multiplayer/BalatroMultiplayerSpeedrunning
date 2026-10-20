@@ -12,8 +12,11 @@
 -- now that Ranked is actually live; the server's assertRankedEnabled()
 -- guard in matchmaking.route.ts is still the real switch if it ever needs
 -- to come back.
+--
+-- Now asked through MPAPI.can_queue (MPAPI api/connection/standing.lua), which
+-- also refuses a game whose reported mods aren't allowed.
 function SPDRN._ranked_queue_available()
-	return MPAPI.is_launcher_verified()
+	return (MPAPI.can_queue(MPAPI.QueueKind.RANKED))
 end
 
 -- Routes to the shared gamemode-select page (ui/main_menu/game_select.lua) instead of this

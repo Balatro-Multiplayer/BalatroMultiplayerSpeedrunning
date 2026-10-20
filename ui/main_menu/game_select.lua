@@ -136,6 +136,13 @@ function SPDRN.refresh_game_select_queue_state()
 	end
 end
 
+-- The queue buttons grey out by the account's standing, which the server can change at any time.
+if MPAPI.on_standing_changed then
+	MPAPI.on_standing_changed(function()
+		SPDRN.refresh_game_select_queue_state()
+	end)
+end
+
 local function stop_find_game_poller_only()
 	if _find_game_poller then
 		_find_game_poller.stop()
@@ -281,16 +288,28 @@ end
 -- below) needs to act -- either leave this queue or join it, keyed by the same wire game_mode
 -- string SPDRN._queue_handles uses. Fully custom (not MPAPI.ui_pillar_select_button) since it
 -- needs this reactive two-state colour flip, which is SPDRN's own queueing concern.
+--
+-- A pillar the account's standing refuses (MPAPI.can_queue: Casual needs a valid or verified
+-- account, Ranked a launcher-verified one) is greyed, and pressing it says why
+-- (spdrn_game_select_standing_refused) instead of queueing.
 local function build_queue_select_button(mode, is_disabled)
 	local el = MPAPI.ui_element(function()
 		local queued = SPDRN._queue_handles[mode.game_mode_stat_key] ~= nil
 		-- No solo queue while this client's lobby is queueing as a group.
 		local Group = MPAPI.matchmaking.group
-		local is_disabled = is_disabled or (Group and Group.is_active and Group.is_active() and not queued)
+		local group_busy = Group and Group.is_active and Group.is_active() and not queued
+		local may_queue, refusal = MPAPI.can_queue(mode.ranked and MPAPI.QueueKind.RANKED or MPAPI.QueueKind.CASUAL)
+		local standing_refused = not queued and not may_queue
+		local is_disabled = is_disabled or group_busy or standing_refused
 		local config = {
 			align = 'cm', minh = 0.5, minw = 2.2, padding = 0.06, r = 0.1,
 			colour = is_disabled and G.C.UI.BACKGROUND_INACTIVE or (queued and G.C.RED or G.C.ORANGE),
 		}
+		if standing_refused and not group_busy then
+			config.hover = true
+			config.button = 'spdrn_game_select_standing_refused'
+			config.ref_table = { refusal = refusal }
+		end
 		if not is_disabled then
 			config.shadow = true
 			config.hover = true
@@ -325,6 +344,14 @@ G.FUNCS.spdrn_game_select_toggle_queue = function(e)
 	end
 end
 
+-- A standing-refused pillar's press: MPAPI's ui/mods_not_allowed_overlay.lua says why.
+G.FUNCS.spdrn_game_select_standing_refused = function(e)
+	local rt = e.config.ref_table
+	if rt and rt.refusal then
+		MPAPI.show_standing_refusal(rt.refusal)
+	end
+end
+
 local function build_select(mode, intent, is_disabled)
 	if intent == 'find_game' then
 		return build_queue_select_button(mode, is_disabled)
@@ -347,7 +374,9 @@ function SPDRN.build_game_select_ui(intent)
 
 	local items = {}
 	for _, mode in ipairs(modes) do
-		local is_disabled = intent == 'find_game' and mode.ranked and not SPDRN._ranked_queue_available()
+		-- find_game's queue buttons grey themselves by the account's standing
+		-- (build_queue_select_button); nothing else is disabled up front.
+		local is_disabled = false
 		local colours = CHIP_COLOURS[mode.chip_row] or { bg = G.C.BLACK, icon = G.C.WHITE }
 		items[#items + 1] = {
 			id = mode.key .. (mode.ranked and '_ranked' or ''),
