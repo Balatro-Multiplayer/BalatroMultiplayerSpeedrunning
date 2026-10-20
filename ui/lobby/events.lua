@@ -62,8 +62,16 @@ SPDRN.setup_lobby_events = function(lobby)
 		update_game_buttons()
 	end)
 
+	-- The group panel also refuses while a player is away: follow players
+	-- dropping and coming back (a group member back from a public match after
+	-- its host).
+	lobby:on('player_disconnected', function()
+		refresh_private_view()
+	end)
+
 	lobby:on('player_reconnected', function(player_id)
 		SPDRN.sendDebugMessage('Player reconnected: ' .. tostring(player_id))
+		refresh_private_view()
 		-- §16.5: votes reset on a reconnect too, same as a leave -- a stale
 		-- unanimous vote from before the drop shouldn't fire again the instant
 		-- the reconnecting player's own client re-syncs.
