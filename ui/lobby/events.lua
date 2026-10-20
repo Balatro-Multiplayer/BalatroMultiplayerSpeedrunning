@@ -1,5 +1,12 @@
 SPDRN.setup_lobby_events = function(lobby)
 	local L = SPDRN.lobby
+	-- Who reported a result in the last lobby's match means nothing in
+	-- another lobby: a group back home from its public match otherwise saw
+	-- everyone crossed out on the home lobby's cards
+	-- (objects/player_status_provider.lua).
+	if L.ref ~= lobby then
+		SPDRN._collected_results = {}
+	end
 	L.ref = lobby
 	L.ui_ref = MPAPI.create_lobby_ui(lobby)
 	L.ready:reset()
@@ -17,8 +24,18 @@ SPDRN.setup_lobby_events = function(lobby)
 		SPDRN.refresh_matchmaking_status()
 	end
 
+	-- A private lobby's group panel (ui/lobby/group_panel.lua) says whether
+	-- the lobby may queue as a group from its size, so a join or leave
+	-- rebuilds the view as a metadata change does.
+	local function refresh_private_view()
+		if not SPDRN.is_matchmaking() then
+			MPAPI.refresh_current_view()
+		end
+	end
+
 	lobby:on('player_joined', function(player_id)
 		SPDRN.sendDebugMessage('Player joined: ' .. tostring(player_id))
+		refresh_private_view()
 		update_game_buttons()
 		-- A late arrival may complete the ready set.
 		SPDRN.maybe_autostart()
@@ -32,6 +49,7 @@ SPDRN.setup_lobby_events = function(lobby)
 		-- the old roster would otherwise misfire once someone leaves).
 		L.seed_votes:reset()
 		L.draw_votes:reset()
+		refresh_private_view()
 		-- Leaving mid-run (or timing out of the server's grace period) is a
 		-- forfeit, as in PvP: the gamemode's host-authoritative hook decides
 		-- whether the rest have won. A player who already forfeited through
@@ -44,8 +62,16 @@ SPDRN.setup_lobby_events = function(lobby)
 		update_game_buttons()
 	end)
 
+	-- The group panel also refuses while a player is away: follow players
+	-- dropping and coming back (a group member back from a public match after
+	-- its host).
+	lobby:on('player_disconnected', function()
+		refresh_private_view()
+	end)
+
 	lobby:on('player_reconnected', function(player_id)
 		SPDRN.sendDebugMessage('Player reconnected: ' .. tostring(player_id))
+		refresh_private_view()
 		-- §16.5: votes reset on a reconnect too, same as a leave -- a stale
 		-- unanimous vote from before the drop shouldn't fire again the instant
 		-- the reconnecting player's own client re-syncs.
@@ -67,6 +93,13 @@ SPDRN.setup_lobby_events = function(lobby)
 		end
 		update_game_buttons()
 	end)
+
+	-- The group queue panel (ui/lobby/group_panel.lua) follows the queue.
+	if MPAPI.LobbyEvent.GROUP_QUEUE then
+		lobby:on(MPAPI.LobbyEvent.GROUP_QUEUE, function()
+			MPAPI.refresh_current_view()
+		end)
+	end
 
 	lobby:on('host_changed', function()
 		if not SPDRN.is_matchmaking() then
