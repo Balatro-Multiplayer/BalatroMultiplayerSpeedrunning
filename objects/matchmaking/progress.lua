@@ -163,7 +163,10 @@ function SPDRN.record_run_completed()
 		return
 	end
 	local started_at = SPDRN._current_run_started_at or love.timer.getTime()
-	local run_time_ms = (love.timer.getTime() - started_at) * 1000
+	-- Whole milliseconds: the metric becomes the ranked seasonBest, which the
+	-- server's Postgres mirror stores as a bigint (a fractional one failed
+	-- the whole run's mirror write).
+	local run_time_ms = math.floor((love.timer.getTime() - started_at) * 1000 + 0.5)
 	if not p.best_run_time_ms or run_time_ms < p.best_run_time_ms then
 		p.best_run_time_ms = run_time_ms
 	end
