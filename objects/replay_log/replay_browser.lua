@@ -116,52 +116,89 @@ end
 -- dispatch namespace this mod happens to also use the same word for.
 MPAPI.playback.register_launcher(SPDRN.id, SPDRN._launch_replay)
 
-G.FUNCS.spdrn_open_replay_browser = function()
-	MPAPI.replay.list_mine(nil, function(err, data)
+-- cursors[i] is the server cursor page i starts from (false for the newest).
+-- MPAPI.replay.list_mine_of keeps only SPDRN's runs and reads past pages
+-- holding only other mods' runs (runs_mine has no modId filter).
+local browser = { cursors = { false }, index = 1 }
+
+local function replay_row(run)
+	G.FUNCS['spdrn_replay_pick_' .. run.id] = function()
+		G.FUNCS.exit_overlay_menu()
+		SPDRN._launch_replay(run.id)
+	end
+	return { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
+		UIBox_button({
+			button = 'spdrn_replay_pick_' .. run.id,
+			label = { format_run_label(run) },
+			colour = G.C.GREEN,
+			minw = 5,
+			minh = 0.6,
+			scale = 0.35,
+		}),
+	} }
+end
+
+local function page_nav()
+	local nav = {}
+	if browser.index > 1 then
+		nav[#nav + 1] = UIBox_button({ button = 'spdrn_replay_newer', label = { 'Newer' }, colour = G.C.ORANGE, minw = 2, minh = 0.6, scale = 0.35 })
+	end
+	if browser.cursors[browser.index + 1] then
+		nav[#nav + 1] = UIBox_button({ button = 'spdrn_replay_older', label = { 'Older' }, colour = G.C.ORANGE, minw = 2, minh = 0.6, scale = 0.35 })
+	end
+	return nav
+end
+
+local function show_page(runs)
+	local rows = {
+		{ n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
+			{ n = G.UIT.T, config = { text = 'My Replays', scale = 0.6, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
+		} },
+	}
+
+	if #runs == 0 then
+		rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', minh = 2 }, nodes = {
+			{ n = G.UIT.T, config = { text = 'No replays yet.', scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
+		} }
+	else
+		for _, run in ipairs(runs) do
+			rows[#rows + 1] = replay_row(run)
+		end
+	end
+
+	local nav = page_nav()
+	if #nav > 0 then
+		rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = nav }
+	end
+
+	G.FUNCS.overlay_menu({ definition = create_UIBox_generic_options({ contents = rows }) })
+end
+
+local function open_page(index)
+	MPAPI.replay.list_mine_of(SPDRN.id, { cursor = browser.cursors[index] or nil }, function(err, data)
 		if err then
 			SPDRN.sendWarnMessage('[replay] list_mine failed: ' .. tostring(err.message))
 			return
 		end
-
-		-- MPAPI.replay.list_mine returns every run for this player across every
-		-- mod (the server route has no modId filter) -- confirmed live: with
-		-- PvP also installed, this list included PvP runs too. Filter to
-		-- SPDRN's own here rather than showing (and mis-launching, via the
-		-- wrong playback engine/opcode vocabulary) another mod's replay.
-		local all_runs = (data and data.runs) or {}
-		local runs = {}
-		for _, run in ipairs(all_runs) do
-			if run.modId == SPDRN.id then runs[#runs + 1] = run end
-		end
-		local rows = {
-			{ n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
-				{ n = G.UIT.T, config = { text = 'My Replays', scale = 0.6, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
-			} },
-		}
-
-		if #runs == 0 then
-			rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', minh = 2 }, nodes = {
-				{ n = G.UIT.T, config = { text = 'No replays yet.', scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
-			} }
-		else
-			for _, run in ipairs(runs) do
-				rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = {
-					UIBox_button({
-						button = 'spdrn_replay_pick_' .. run.id,
-						label = { format_run_label(run) },
-						colour = G.C.GREEN,
-						minw = 5,
-						minh = 0.6,
-						scale = 0.35,
-					}),
-				} }
-				G.FUNCS['spdrn_replay_pick_' .. run.id] = function()
-					G.FUNCS.exit_overlay_menu()
-					SPDRN._launch_replay(run.id)
-				end
-			end
-		end
-
-		G.FUNCS.overlay_menu({ definition = create_UIBox_generic_options({ contents = rows }) })
+		browser.index = index
+		browser.cursors[index + 1] = data.cursor or false
+		show_page(data.runs)
 	end)
+end
+
+G.FUNCS.spdrn_open_replay_browser = function()
+	browser = { cursors = { false }, index = 1 }
+	open_page(1)
+end
+
+G.FUNCS.spdrn_replay_newer = function()
+	if browser.index > 1 then
+		open_page(browser.index - 1)
+	end
+end
+
+G.FUNCS.spdrn_replay_older = function()
+	if browser.cursors[browser.index + 1] then
+		open_page(browser.index + 1)
+	end
 end
