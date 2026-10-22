@@ -40,7 +40,7 @@ end
 -- no-op if it somehow fires outside an active session, regardless of whether some earlier
 -- G.HUD instance's wiring is still lingering.
 G.FUNCS.spdrn_open_checkpoint_picker = function()
-	if not next(MPAPI.playback._active_drivers) then
+	if not SPDRN.is_replay_driving() then
 		return
 	end
 	local session = SPDRN._active_replay_session

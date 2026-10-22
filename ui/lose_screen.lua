@@ -197,8 +197,15 @@ end
 -- trigger) is a loss path -- a genuine win never sets it (win_game() shows its own overlay
 -- from ROUND_EVAL instead).
 function SPDRN._check_run_lost()
+	-- Checked first: another mod's playback (a PvP replay, rejoin or spectate) also fills
+	-- MPAPI.playback._active_drivers and must never reach the restart fallback below.
+	if not (MPAPI.is_active(SPDRN.id) and MPAPI.get_current_lobby()) then
+		SPDRN._run_lost_shown = false
+		SPDRN._replay_divergent_death_since = nil
+		return
+	end
 	-- CONFIRMED LIVE BUG, fixed by this guard: while a replay/rejoin driver is actively driving
-	-- (MPAPI.playback._active_drivers non-empty -- the one reliable "a driver, not a real player,
+	-- (SPDRN.is_replay_driving() -- the one reliable "a driver, not a real player,
 	-- is in control" signal anywhere in this codebase, already relied on the same way by
 	-- ui/replay/checkpoint_picker.lua's own click handler), this watcher is not just redundant
 	-- with run_died's own opcode-driven recovery (SPDRN._playback_handle_run_transition,
@@ -214,7 +221,7 @@ function SPDRN._check_run_lost()
 	-- recorded fact by the time it's being replayed, never something the viewer needs to be
 	-- asked to Restart/Forfeit -- that choice was already made, historically, by the original
 	-- player.
-	if next(MPAPI.playback._active_drivers) then
+	if SPDRN.is_replay_driving() then
 		-- CONFIRMED LIVE BUG, fixed by the bounded fallback below: the guard above assumes every
 		-- G.STATE == GAME_OVER reached during replay corresponds to a RECORDED run_died opcode
 		-- that's actually still coming later in the timeline, whose own opcode-driven recovery
@@ -256,10 +263,6 @@ function SPDRN._check_run_lost()
 		else
 			SPDRN._replay_divergent_death_since = nil
 		end
-		SPDRN._run_lost_shown = false
-		return
-	end
-	if not (MPAPI.is_active(SPDRN.id) and MPAPI.get_current_lobby()) then
 		SPDRN._run_lost_shown = false
 		return
 	end

@@ -82,7 +82,7 @@ function SPDRN._check_pending_run_transition()
 	-- start_run -- which runs vanilla's Game:start_run synchronously, still inside this same
 	-- Game:update tick -- gives a future recurrence something to correlate against instead of
 	-- just a bare "it froze here."
-	if next(MPAPI.playback._active_drivers) then
+	if SPDRN.is_replay_driving() then
 		local used_vouchers = 0
 		for _ in pairs((G.GAME and G.GAME.used_vouchers) or {}) do
 			used_vouchers = used_vouchers + 1
