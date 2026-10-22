@@ -25,38 +25,42 @@ local function code_panel()
 	}
 end
 
--- Host gets a deck-picker button; guests see the chosen deck as a read-only label. Rebuilt
--- with the lobby view, so it reflects the current metadata deck (refreshed on metadata_changed).
-local function deck_panel()
-	local lobby = SPDRN.lobby.ref
-	local meta = (lobby and lobby:get_metadata()) or {}
-	local deck_name = SPDRN.deck_label(meta.deck)
-	if lobby and lobby.is_host then
+-- The deck box every lobby shows in the bar: purple, the size of the host's deck-picker button
+-- (UIBox_button's own node layout). Only the host's picker is pressable; the static one leaves
+-- out the hover/press.
+local function deck_box(lines, button)
+	if button then
 		return { n = G.UIT.C, config = { align = 'cm', padding = 0.05 }, nodes = {
-			UIBox_button({ id = 'spdrn_choose_deck', button = 'spdrn_choose_deck', colour = G.C.PURPLE, minw = 2.65, minh = 1.35, label = { 'Deck', deck_name }, scale = 0.4, col = true }),
+			UIBox_button({ id = button, button = button, colour = G.C.PURPLE, minw = 2.65, minh = 1.35, label = lines, scale = 0.4, col = true }),
 		} }
 	end
-	return { n = G.UIT.C, config = { align = 'cm', padding = 0.05, r = 0.1, colour = G.C.L_BLACK, minw = 2.65, minh = 1.35, emboss = 0.05 }, nodes = {
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = { { n = G.UIT.T, config = { text = 'Deck', scale = 0.32, colour = G.C.UI.TEXT_INACTIVE } } } },
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = { { n = G.UIT.T, config = { text = deck_name, scale = 0.42, colour = G.C.UI.TEXT_LIGHT, shadow = true } } } },
+	local rows = {}
+	for _, line in ipairs(lines) do
+		rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', minw = 2.65, maxw = 2.45 }, nodes = {
+			{ n = G.UIT.T, config = { text = line, scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
+		} }
+	end
+	return { n = G.UIT.C, config = { align = 'cm', padding = 0.05 }, nodes = {
+		{ n = G.UIT.C, config = { align = 'cm' }, nodes = {
+			{ n = G.UIT.C, config = { align = 'cm', r = 0.1, colour = G.C.PURPLE, minh = 1.35, shadow = true }, nodes = rows },
+		} },
 	} }
 end
 
--- A static, non-interactive label for gamemodes with always_draft = true (All Deck, Challenge,
--- Seed Scout) -- there is nothing to pick up front, the ban-pick draft (run inline via
--- build_matchmaking_controls, see SPDRN.lobby.build_controls) decides the deck once the lobby
--- is full. Shaped like the host's deck button (UIBox_button's own node layout, minus the
--- hover/press) so it lines up with the rest of the bar.
+-- Host gets the deck picker; guests see the chosen deck in the same box. Rebuilt with the
+-- lobby view, so it reflects the current metadata deck (refreshed on metadata_changed).
+local function deck_panel()
+	local lobby = SPDRN.lobby.ref
+	local meta = (lobby and lobby:get_metadata()) or {}
+	local lines = { 'Deck', SPDRN.deck_label(meta.deck) }
+	return deck_box(lines, lobby and lobby.is_host and 'spdrn_choose_deck' or nil)
+end
+
+-- Gamemodes with always_draft = true (All Deck, Challenge, Seed Scout): there is nothing to
+-- pick up front, the ban-pick draft (run inline via build_matchmaking_controls, see
+-- SPDRN.lobby.build_controls) decides the deck once the lobby is full.
 local function draft_panel()
-	return { n = G.UIT.C, config = { align = 'cm', padding = 0.05 }, nodes = {
-		{ n = G.UIT.C, config = { align = 'cm' }, nodes = {
-			{ n = G.UIT.C, config = { align = 'cm', r = 0.1, colour = G.C.PURPLE, minh = 1.35, shadow = true }, nodes = {
-				{ n = G.UIT.R, config = { align = 'cm', minw = 2.65, maxw = 2.45 }, nodes = {
-					{ n = G.UIT.T, config = { text = 'Deck Ban', scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
-				} },
-			} },
-		} },
-	} }
+	return deck_box({ 'Deck Ban' })
 end
 
 -- Dispatches which panel(s) the current gamemode needs.
