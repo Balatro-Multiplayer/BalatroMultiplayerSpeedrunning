@@ -133,6 +133,20 @@ function SPDRN._drop_playback_waiters()
 	SPDRN._playback_waiters = {}
 end
 
+-- A playback ended or quit early (back to the menu, or its local lobby left)
+-- takes its waiters with it. Left in, a bootstrap waiter fired at the next
+-- run's BLIND_SELECT -- a PvP practice, replay or vanilla run included -- and
+-- fed SPDRN replay input into it. Same fix as PvP b172a46f.
+local _go_to_menu_ref = G.FUNCS.go_to_menu
+G.FUNCS.go_to_menu = function(e)
+	SPDRN._drop_playback_waiters()
+	return _go_to_menu_ref(e)
+end
+
+MPAPI.on_lobby_gone(SPDRN.id, function()
+	SPDRN._drop_playback_waiters()
+end)
+
 local _playback_launch_update_ref = Game.update
 function Game:update(dt)
 	_playback_launch_update_ref(self, dt)
