@@ -5,7 +5,8 @@
 -- result.lua) -- a drawn match has no winner to rate.
 MPAPI.ActionType({
 	key = 'spdrn_match_draw',
-	on_receive = function(action_type, from_player_id, params)
+	-- Host-only (domain/sender.lua).
+	on_receive = SPDRN.Sender.host_only('spdrn_match_draw', function(action_type, from_player_id, params)
 		G.E_MANAGER:add_event(Event({
 			func = function()
 				if G.STAGE == G.STAGES.RUN then
@@ -15,5 +16,5 @@ MPAPI.ActionType({
 			end,
 		}))
 		SPDRN.report_match_result(nil, { draw = true })
-	end,
+	end),
 })

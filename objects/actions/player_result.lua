@@ -8,6 +8,13 @@ MPAPI.ActionType({
 		if not params or not params.player_id then
 			return
 		end
+		-- A player reports only its own result.
+		if params.player_id ~= from_player_id then
+			SPDRN.sendDebugMessage(
+				'Ignored spdrn_player_result for ' .. tostring(params.player_id) .. ' from ' .. tostring(from_player_id)
+			)
+			return
+		end
 
 		SPDRN._collected_results[params.player_id] = {
 			furthest_ante = params.furthest_ante,
