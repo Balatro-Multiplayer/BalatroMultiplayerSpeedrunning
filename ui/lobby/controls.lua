@@ -44,12 +44,18 @@ end
 
 -- A static, non-interactive label for gamemodes with always_draft = true (All Deck, Challenge,
 -- Seed Scout) -- there is nothing to pick up front, the ban-pick draft (run inline via
--- build_matchmaking_controls, see SPDRN.lobby.build_controls) decides everything once the lobby
--- is full.
+-- build_matchmaking_controls, see SPDRN.lobby.build_controls) decides the deck once the lobby
+-- is full. Shaped like the host's deck button (UIBox_button's own node layout, minus the
+-- hover/press) so it lines up with the rest of the bar.
 local function draft_panel()
-	return { n = G.UIT.C, config = { align = 'cm', padding = 0.05, r = 0.1, colour = G.C.L_BLACK, minw = 2.65, minh = 1.35, emboss = 0.05 }, nodes = {
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = { { n = G.UIT.T, config = { text = 'Draft', scale = 0.32, colour = G.C.UI.TEXT_INACTIVE } } } },
-		{ n = G.UIT.R, config = { align = 'cm' }, nodes = { { n = G.UIT.T, config = { text = 'Decided at start', scale = 0.32, colour = G.C.UI.TEXT_LIGHT, shadow = true } } } },
+	return { n = G.UIT.C, config = { align = 'cm', padding = 0.05 }, nodes = {
+		{ n = G.UIT.C, config = { align = 'cm' }, nodes = {
+			{ n = G.UIT.C, config = { align = 'cm', r = 0.1, colour = G.C.PURPLE, minh = 1.35, shadow = true }, nodes = {
+				{ n = G.UIT.R, config = { align = 'cm', minw = 2.65, maxw = 2.45 }, nodes = {
+					{ n = G.UIT.T, config = { text = 'Deck Ban', scale = 0.4, colour = G.C.UI.TEXT_LIGHT } },
+				} },
+			} },
+		} },
 	} }
 end
 
