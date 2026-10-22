@@ -7,7 +7,8 @@
 -- SPDRN.apply_current_run_seed's own comment).
 MPAPI.ActionType({
 	key = 'spdrn_seed_change_apply',
-	on_receive = function(action_type, from_player_id, params)
+	-- Host-only (domain/sender.lua).
+	on_receive = SPDRN.Sender.host_only('spdrn_seed_change_apply', function(action_type, from_player_id, params)
 		SPDRN.apply_current_run_seed(params.seed)
-	end,
+	end),
 })

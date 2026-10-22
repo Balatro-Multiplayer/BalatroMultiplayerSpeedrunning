@@ -71,6 +71,10 @@ SPDRN.setup_lobby_events = function(lobby)
 
 	lobby:on('player_reconnected', function(player_id)
 		SPDRN.sendDebugMessage('Player reconnected: ' .. tostring(player_id))
+		-- The host may have changed while we were away (domain/sender.lua).
+		if player_id == lobby.player_id then
+			SPDRN.Sender.forget_host(lobby)
+		end
 		refresh_private_view()
 		-- §16.5: votes reset on a reconnect too, same as a leave -- a stale
 		-- unanimous vote from before the drop shouldn't fire again the instant
@@ -116,7 +120,9 @@ SPDRN.setup_lobby_events = function(lobby)
 		end)
 	end
 
-	lobby:on('host_changed', function()
+	lobby:on('host_changed', function(host_id)
+		-- Host-only actions are taken from this player now (domain/sender.lua).
+		SPDRN.Sender.note_host(lobby, host_id)
 		if not SPDRN.is_matchmaking() then
 			MPAPI.refresh_current_view()
 		end

@@ -18,6 +18,14 @@ MPAPI.ActionType({
 		if not winner_id then
 			return
 		end
+		-- A player declares its own win; only the host declares another's (a
+		-- forfeit's last survivor, MPAPI's check_single_survivor runs on the host).
+		if winner_id ~= from_player_id and not SPDRN.Sender.is_host(lobby, from_player_id) then
+			SPDRN.sendDebugMessage(
+				'Ignored spdrn_player_won for ' .. tostring(winner_id) .. ' from ' .. tostring(from_player_id)
+			)
+			return
+		end
 
 		local won = (winner_id == lobby.player_id)
 

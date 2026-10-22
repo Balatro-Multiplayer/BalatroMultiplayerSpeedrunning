@@ -7,7 +7,8 @@
 -- objects/matchmaking/result.lua's build_placements).
 MPAPI.ActionType({
 	key = 'spdrn_match_timeout',
-	on_receive = function(action_type, from_player_id, params)
+	-- Host-only (domain/sender.lua).
+	on_receive = SPDRN.Sender.host_only('spdrn_match_timeout', function(action_type, from_player_id, params)
 		local lobby = MPAPI.get_current_lobby()
 		if not lobby then
 			return
@@ -23,5 +24,5 @@ MPAPI.ActionType({
 		}))
 
 		SPDRN.report_match_result(nil)
-	end,
+	end),
 })
