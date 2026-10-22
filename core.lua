@@ -86,7 +86,7 @@ MPAPI.on_loaded(function()
 		key = 'spdrn_game_select',
 		category = 'game_select',
 		build = function(self)
-			self._pillar_row = SPDRN.build_game_select_ui(self.params and self.params.intent)
+			self._pillar_row = SPDRN.build_game_select_ui(self.params and self.params.intent, self.params and self.params.group)
 			return self._pillar_row.definition
 		end,
 		-- The find_game intent's pillars show live queue/in-game counts (ui/main_menu/game_select.lua);
@@ -107,7 +107,9 @@ MPAPI.on_loaded(function()
 			-- otherwise leaves whatever offset the PREVIOUS page's own cleanup animation last
 			-- set (e.g. spdrn_main_menu's cleanup raises it, spdrn_lobby's resets it to 0), so
 			-- which page you came from made the logo land in a different place each time.
-			MPAPI.set_logo_offset(-1, true)
+			-- The group-queue header row (ui/main_menu/game_select.lua) needs the logo
+			-- raised clear of it, as PvP's tabbed Find Game page does.
+			MPAPI.set_logo_offset(self.params and self.params.group and -2.5 or -1, true)
 		end,
 		-- Runs on every way of leaving this page, including going straight into a run
 		-- (MPAPI.pages.teardown, not just a normal page swap) -- see MPAPI.pages' own

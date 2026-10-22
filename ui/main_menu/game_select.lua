@@ -352,7 +352,49 @@ G.FUNCS.spdrn_game_select_standing_refused = function(e)
 	end
 end
 
-local function build_select(mode, intent, is_disabled)
+-- In group mode (opened from a private lobby's Group Queue button, ui/lobby/group_panel.lua)
+-- a pillar's QUEUE queues the whole lobby for its mode instead (objects/matchmaking/
+-- group_queue.lua). A mode the lobby doesn't fit is greyed; one a member's standing refuses
+-- is greyed but still pressable, so the server's refusal says which mods.
+local function build_group_select(mode)
+	local el = MPAPI.ui_element(function()
+		local available, standing_refused = SPDRN.group_mode_available(MPAPI.get_current_lobby(), mode.key)
+		local lit = available and not standing_refused
+		local config = {
+			align = 'cm', minh = 0.5, minw = 2.2, padding = 0.06, r = 0.1,
+			colour = lit and G.C.ORANGE or G.C.UI.BACKGROUND_INACTIVE,
+		}
+		if available then
+			config.shadow = lit
+			config.hover = true
+			config.one_press = true
+			config.button = 'spdrn_group_queue_mode'
+			config.ref_table = { gamemode_key = mode.key }
+		end
+		return { nodes = { { n = G.UIT.R, config = config, nodes = {
+			{ n = G.UIT.T, config = { text = 'QUEUE', scale = 0.4, colour = lit and G.C.UI.TEXT_LIGHT or G.C.UI.TEXT_INACTIVE, shadow = lit } },
+		} } } }
+	end)
+	_find_game_select_els[mode.game_mode_stat_key] = el
+	return el.node
+end
+
+-- Group mode's header: the way back to the lobby.
+local function build_group_header()
+	return { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
+		{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
+			UIBox_button({ button = 'spdrn_group_queue_back', label = { localize('b_back') }, colour = G.C.ORANGE, minw = 2.4, minh = 0.6, scale = 0.4 }),
+		} },
+		{ n = G.UIT.C, config = { align = 'cm', padding = 0.08 }, nodes = {
+			UIBox_button({ button = 'nil', label = { localize('k_group_queue') }, colour = G.C.BLUE, minw = 3.0, minh = 0.6, scale = 0.4 }),
+		} },
+	} }
+end
+
+local function build_select(mode, intent, is_disabled, group)
+	if group then
+		return build_group_select(mode)
+	end
 	if intent == 'find_game' then
 		return build_queue_select_button(mode, is_disabled)
 	end
@@ -368,9 +410,12 @@ end
 -- core.lua) owns the controller for this page's lifetime: hand `.definition` to build(), and
 -- call `:dispose()` from the page's own dispose() hook so every tracked chip icon gets
 -- :remove()'d -- see api/ui_pillar_row.lua's header comment for why that's required.
-function SPDRN.build_game_select_ui(intent)
+-- `group` (find_game only) builds the casual pillars for queueing the current private lobby
+-- as a group, with a back-to-lobby header above them.
+function SPDRN.build_game_select_ui(intent, group)
 	intent = intent or 'practice'
-	local modes = intent == 'find_game' and FIND_GAME_MODES or PRACTICE_LOBBY_MODES
+	group = group and intent == 'find_game'
+	local modes = group and SPDRN.GROUP_QUEUE_MODES or intent == 'find_game' and FIND_GAME_MODES or PRACTICE_LOBBY_MODES
 
 	local items = {}
 	for _, mode in ipairs(modes) do
@@ -382,7 +427,7 @@ function SPDRN.build_game_select_ui(intent)
 			id = mode.key .. (mode.ranked and '_ranked' or ''),
 			group = mode.ranked,
 			icon = build_chip_sprite(mode.chip_row),
-			select = build_select(mode, intent, is_disabled),
+			select = build_select(mode, intent, is_disabled, group),
 			name_plate = MPAPI.ui_pillar_name_plate({
 				lines = mode.name,
 				bg_colour = darken(colours.bg, 0.3),
@@ -399,5 +444,9 @@ function SPDRN.build_game_select_ui(intent)
 	-- position is re-anchored every frame regardless of this content. The actual fix is in
 	-- core.lua's on_enter, which nudges G.MAIN_MENU_UI.alignment.offset.y directly (the same
 	-- field api/page/manager.lua itself sets to 0 after construction).
-	return MPAPI.ui_pillar_row({ items = items, group_gap = 0.9 })
+	local pillar_row = MPAPI.ui_pillar_row({ items = items, group_gap = 0.9 })
+	if group then
+		table.insert(pillar_row.definition.nodes, 1, build_group_header())
+	end
+	return pillar_row
 end

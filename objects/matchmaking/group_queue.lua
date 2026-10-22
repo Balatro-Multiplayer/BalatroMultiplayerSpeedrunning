@@ -5,7 +5,6 @@
 -- (objects/matchmaking/queue.lua) and says how to rejoin the home lobby.
 
 -- The host's pick in the group panel (index into the eligible list).
-SPDRN._group_mode_choice = SPDRN._group_mode_choice or 1
 
 local function mode_name(mode)
 	if type(mode.name) == 'table' then
@@ -161,21 +160,42 @@ if MPAPI.matchmaking.group and MPAPI.matchmaking.group.register then
 	})
 end
 
-G.FUNCS.spdrn_group_queue = function()
-	local eligible = SPDRN.group_queue_options(MPAPI.get_current_lobby())
-	local mode = eligible[math.max(1, math.min(SPDRN._group_mode_choice or 1, #eligible))]
-	if not mode then
-		return
+-- Whether the host may queue the lobby for `key` now, and whether a member's
+-- standing refuses it. A refused standing leaves the mode pressable: the
+-- server's refusal names the mods (MPAPI api/matchmaking/group/queue.lua).
+function SPDRN.group_mode_available(lobby, key)
+	local eligible, refusal = SPDRN.group_queue_options(lobby)
+	local standing_refused = refusal and refusal.code == MPAPI.matchmaking.group.Refusal.MEMBER_REFUSED
+	if refusal and not standing_refused then
+		return false
 	end
-	SPDRN._join_group_queue(mode.key)
+	for _, mode in ipairs(eligible) do
+		if mode.key == key then
+			return true, standing_refused and true or false
+		end
+	end
+	return false
+end
+
+-- The lobby's Group Queue button: pick a mode from the casual pillars.
+G.FUNCS.spdrn_group_queue = function()
+	MPAPI.pages.show('spdrn_game_select', { intent = 'find_game', group = true })
+end
+
+-- A pillar's group QUEUE: queue the lobby for that mode and go back to it.
+G.FUNCS.spdrn_group_queue_mode = function(e)
+	local rt = e.config.ref_table
+	if rt and rt.gamemode_key and SPDRN._join_group_queue(rt.gamemode_key) then
+		MPAPI.pages.show_deferred('spdrn_lobby')
+	end
+end
+
+G.FUNCS.spdrn_group_queue_back = function()
+	MPAPI.pages.show_deferred('spdrn_lobby')
 end
 
 G.FUNCS.spdrn_group_cancel = function()
 	SPDRN._cancel_group_queue()
-end
-
-G.FUNCS.spdrn_group_mode_cycle = function(args)
-	SPDRN._group_mode_choice = args.to_key
 end
 
 G.FUNCS.spdrn_group_return = function()
