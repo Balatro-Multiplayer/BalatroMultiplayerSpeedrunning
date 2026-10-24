@@ -679,11 +679,9 @@ end)
 -- seen live.
 local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
 
--- The Cash Out button is its own UIBox, built by a delayed event some time after the
--- round_eval screen. A player can only press it once it exists. If the replay calls cash_out
--- earlier, G.round_eval is removed first and the button UIBox is then built with no major
--- to follow: it stays forever, off screen (one leaked UIBox per round). Confirmed live:
--- one orphan per replayed cash-out, none in live play.
+-- The Cash Out button is its own UIBox, built some time after the round_eval screen. Calling
+-- cash_out before it exists removes G.round_eval first, and the button is then built with no
+-- major to follow: it leaks off screen.
 local function find_cash_out_button()
 	for _, box in pairs(G.I.UIBOX) do
 		local found
