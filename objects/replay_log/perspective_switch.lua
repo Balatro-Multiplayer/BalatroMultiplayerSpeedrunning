@@ -87,6 +87,7 @@ function SPDRN._switch_perspective(target_player_id)
 		bootstrap = target_bootstrap,
 		timeline = old.timeline,
 		my_id = target_player_id,
+		paced = old.paced,
 		on_session_complete = old.on_session_complete,
 	}, target_event_index)
 end
