@@ -90,6 +90,7 @@ function SPDRN._launch_replay(run_id)
 			bootstrap = bootstrap,
 			timeline = timeline,
 			my_id = my_id,
+			paced = true,
 			on_session_complete = function()
 				-- No `cover` field: confirmed live to crash
 				-- (functions/UI_definitions.lua's attention_text expects
