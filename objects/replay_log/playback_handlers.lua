@@ -360,7 +360,11 @@ MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
 	wait_for_blind_select_screen(driver, function()
 		local blind_before = G.GAME.blind_on_deck
 		local function do_skip_blind()
-			G.FUNCS.skip_blind({ UIBox = G.blind_select })
+			-- vanilla's skip reads the tag from the first tag_container of the UIBox it is handed;
+			-- G.blind_select holds all three panels, so its first one is always the Small blind's.
+			-- Hand it the current blind's own panel (a replayed Big skip granted the Small tag).
+			local panel = G.blind_select_opts and G.blind_select_opts[string.lower(G.GAME.blind_on_deck or 'Small')]
+			G.FUNCS.skip_blind({ UIBox = panel or G.blind_select })
 		end
 		do_skip_blind()
 		wait_for_skip_applied(driver, do_skip_blind, function()
@@ -506,7 +510,10 @@ local function replay_buy(args, ctx)
 		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
 		if not card then return false end
 		local is_booster = card.ability and card.ability.set == 'Booster'
-		G.FUNCS.buy_from_shop({ config = { id = is_booster and 'buy_and_use' or nil, ref_table = card } })
+		-- args[5]: the player pressed "Buy & Use" (a consumable bought and used at once).
+		-- Logs from before the flag existed have no args[5] and replay as a plain buy.
+		local bought_and_used = args and args[5] == true
+		G.FUNCS.buy_from_shop({ config = { id = (is_booster or bought_and_used) and 'buy_and_use' or nil, ref_table = card } })
 		if not is_booster then return false end
 		if driver then driver:pause() end
 		SPDRN._playback_wait_for(function()
@@ -671,11 +678,39 @@ end)
 -- real-time timeout rather than risk hanging forever on an edge case not yet
 -- seen live.
 local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
+
+-- The Cash Out button is its own UIBox, built by a delayed event some time after the
+-- round_eval screen. A player can only press it once it exists. If the replay calls cash_out
+-- earlier, G.round_eval is removed first and the button UIBox is then built with no major
+-- to follow: it stays forever, off screen (one leaked UIBox per round). Confirmed live:
+-- one orphan per replayed cash-out, none in live play.
+local function find_cash_out_button()
+	for _, box in pairs(G.I.UIBOX) do
+		local found
+		local function walk(node)
+			if found or not node then return end
+			if node.config and node.config.button == 'cash_out' then found = node return end
+			for _, child in ipairs(node.children or {}) do walk(child) end
+		end
+		walk(box.UIRoot)
+		if found then return found end
+	end
+end
+
 MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
-	G.FUNCS.cash_out({ config = {} })
+	local button_deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
+	SPDRN._playback_wait_for(function()
+		return find_cash_out_button() ~= nil or (G.round_eval == nil and G.STATE ~= G.STATES.ROUND_EVAL) or love.timer.getTime() >= button_deadline
+	end, function()
+		G.FUNCS.cash_out(find_cash_out_button() or { config = {} })
+		SPDRN._await_cashout_transition(driver)
+	end)
+end)
+
+function SPDRN._await_cashout_transition(driver)
 	local deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
 		if G.STATE == G.STATES.ROUND_EVAL then
@@ -697,4 +732,4 @@ MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
 	end, function()
 		if driver then driver:play() end
 	end)
-end)
+end
