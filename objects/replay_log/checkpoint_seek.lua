@@ -126,6 +126,9 @@ function SPDRN._restart_session_and_seek(session, target_event_index, on_ready)
 			mod_id = 'spdrn',
 			pov_player_id = session.my_id,
 			schema_version = session.bootstrap.schema_version,
+			-- A Replay from the browser plays at the recorded pace with a speed control;
+			-- rejoin leaves this unset and keeps one entry per frame.
+			paced = session.paced,
 			on_complete = session.on_session_complete,
 		})
 		driver:finish()
