@@ -136,10 +136,7 @@ MPAPI.GameMode({
 			self._scout_stake = stake or self._meta_stake or 1
 		end
 
-		local key = SPDRN.resolve_back_key(self._scout_deck)
-		if G.GAME and key and G.P_CENTERS[key] then
-			G.GAME.viewed_back = SPDRN.back_for_key(key)
-		end
+		SPDRN.stage_viewed_back(self._scout_deck)
 
 		if self._phase == 'scout' then
 			-- Anchor the countdown once (survives scout-death restarts -- dying doesn't buy

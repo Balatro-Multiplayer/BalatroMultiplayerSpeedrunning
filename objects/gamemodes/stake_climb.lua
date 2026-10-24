@@ -72,10 +72,7 @@ MPAPI.GameMode({
 		-- down the finished run's blind HUD here too, else it dangles into the next run and
 		-- crashes the smods HUD_blind_debuff assert. Same as White Stake Triple.
 		SPDRN.teardown_existing_run()
-		local key = SPDRN.resolve_back_key(deck_name)
-		if G.GAME and key and G.P_CENTERS[key] then
-			G.GAME.viewed_back = SPDRN.back_for_key(key)
-		end
+		SPDRN.stage_viewed_back(deck_name)
 		-- Stake climbs with the run: run 1 = White (1) ... run 8 = Gold (8). _run_count counts
 		-- COMPLETED runs, so the run currently starting is _run_count + 1 -- recomputed here
 		-- rather than stored, so "Restart Run" (which calls start_run again without touching

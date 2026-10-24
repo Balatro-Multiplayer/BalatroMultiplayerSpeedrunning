@@ -99,10 +99,7 @@ MPAPI.GameMode({
 		-- down the finished run's blind HUD here too, else it dangles into the next run and
 		-- crashes the smods HUD_blind_debuff assert. Same as White Stake Triple.
 		SPDRN.teardown_existing_run()
-		local key = SPDRN.resolve_back_key(deck_name)
-		if G.GAME and key and G.P_CENTERS[key] then
-			G.GAME.viewed_back = SPDRN.back_for_key(key)
-		end
+		SPDRN.stage_viewed_back(deck_name)
 		G.FUNCS.start_run(nil, {
 			stake = 1,
 			seed = seed,
