@@ -674,11 +674,39 @@ end)
 -- real-time timeout rather than risk hanging forever on an edge case not yet
 -- seen live.
 local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
+
+-- The Cash Out button is its own UIBox, built by a delayed event some time after the
+-- round_eval screen. A player can only press it once it exists. If the replay calls cash_out
+-- earlier, G.round_eval is removed first and the button UIBox is then built with no major
+-- to follow: it stays forever, off screen (one leaked UIBox per round). Confirmed live:
+-- one orphan per replayed cash-out, none in live play.
+local function find_cash_out_button()
+	for _, box in pairs(G.I.UIBOX) do
+		local found
+		local function walk(node)
+			if found or not node then return end
+			if node.config and node.config.button == 'cash_out' then found = node return end
+			for _, child in ipairs(node.children or {}) do walk(child) end
+		end
+		walk(box.UIRoot)
+		if found then return found end
+	end
+end
+
 MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
-	G.FUNCS.cash_out({ config = {} })
+	local button_deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
+	SPDRN._playback_wait_for(function()
+		return find_cash_out_button() ~= nil or (G.round_eval == nil and G.STATE ~= G.STATES.ROUND_EVAL) or love.timer.getTime() >= button_deadline
+	end, function()
+		G.FUNCS.cash_out(find_cash_out_button() or { config = {} })
+		SPDRN._await_cashout_transition(driver)
+	end)
+end)
+
+function SPDRN._await_cashout_transition(driver)
 	local deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
 		if G.STATE == G.STATES.ROUND_EVAL then
@@ -700,4 +728,4 @@ MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
 	end, function()
 		if driver then driver:play() end
 	end)
-end)
+end
