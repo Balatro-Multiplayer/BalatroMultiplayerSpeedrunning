@@ -125,7 +125,14 @@ function SPDRN._launch_rejoin(active)
 			-- hash_mismatch. Close it now, without an END/CHK.
 			MPAPI.replay._run_active = false
 			restore_race_clocks()
+			-- The catch-up's gamemode instance (run count, run decks, base seed, win latch)
+			-- is the only one that knows this run: the real lobby is created without one, and
+			-- without it the ante-9 win, the next run of a multi-run format and a forfeiting
+			-- opponent's win all do nothing for the rejoined racer.
+			local playback_lobby = MPAPI.get_current_lobby()
+			local instance = playback_lobby and playback_lobby:get_gamemode_instance()
 			local lobby = MPAPI.join_lobby(SPDRN.id, active.lobbyCode)
+			if lobby and instance then lobby._gamemode_instance = instance end
 			-- Opt out of on_lobby_connected's "match formed while practicing,
 			-- exit the run" behavior (api/mod_registry/focus.lua) -- we're
 			-- reconnecting to the SAME run we just fast-forwarded, not
