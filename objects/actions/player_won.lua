@@ -1,6 +1,11 @@
 -- The defined winning code path: a gamemode's calculate/on_player_forfeit just
 -- returns { winner = player_id } and never touches this ActionType directly.
 MPAPI.on_winner_declared(function(winner_id)
+	-- A Replay re-runs recorded events, so it reaches the recorded ante-9 win.
+	-- Broadcasting it would open the win screen and pause the Replay.
+	if SPDRN.is_replay_driving() then
+		return
+	end
 	local lobby = MPAPI.get_current_lobby()
 	if lobby then
 		lobby:action(MPAPI.ActionTypes['spdrn_player_won']):broadcast({ player_id = winner_id })
