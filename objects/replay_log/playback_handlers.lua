@@ -360,7 +360,11 @@ MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
 	wait_for_blind_select_screen(driver, function()
 		local blind_before = G.GAME.blind_on_deck
 		local function do_skip_blind()
-			G.FUNCS.skip_blind({ UIBox = G.blind_select })
+			-- vanilla's skip reads the tag from the first tag_container of the UIBox it is handed;
+			-- G.blind_select holds all three panels, so its first one is always the Small blind's.
+			-- Hand it the current blind's own panel (a replayed Big skip granted the Small tag).
+			local panel = G.blind_select_opts and G.blind_select_opts[string.lower(G.GAME.blind_on_deck or 'Small')]
+			G.FUNCS.skip_blind({ UIBox = panel or G.blind_select })
 		end
 		do_skip_blind()
 		wait_for_skip_applied(driver, do_skip_blind, function()
