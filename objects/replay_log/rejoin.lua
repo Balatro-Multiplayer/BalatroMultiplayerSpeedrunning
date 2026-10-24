@@ -46,10 +46,16 @@ function SPDRN._launch_rejoin(active)
 			found.lobby_info = true
 			bootstrap.gamemode = ev.args.gamemode
 			bootstrap.ruleset = ev.args.ruleset
+			-- A multi-run format (White Stake Triple, All Deck) plays one deck per run. The
+			-- catch-up must know them all: with only run 1's deck, the run after the first
+			-- win restarts on that same deck, and the rejoined racer lands in run 2 on the
+			-- wrong deck.
+			local decks = ev.args.decks
+			if type(decks) == 'table' and #decks > 1 then bootstrap.deck = decks end
 		elseif not found.run_info and ev.opcode == 'run_info' then
 			found.run_info = true
 			bootstrap.seed = ev.args.seed
-			bootstrap.deck = ev.args.deck
+			bootstrap.deck = bootstrap.deck or ev.args.deck
 			bootstrap.stake = ev.args.stake
 		end
 		timeline[#timeline + 1] = { t = ev.t, player_id = my_id, opcode = ev.opcode, args = ev.args }
