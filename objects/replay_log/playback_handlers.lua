@@ -679,11 +679,9 @@ end)
 -- seen live.
 local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
 
--- The Cash Out button is its own UIBox, built by a delayed event some time after the
--- round_eval screen. A player can only press it once it exists. If the replay calls cash_out
--- earlier, G.round_eval is removed first and the button UIBox is then built with no major
--- to follow: it stays forever, off screen (one leaked UIBox per round). Confirmed live:
--- one orphan per replayed cash-out, none in live play.
+-- The Cash Out button is its own UIBox, built some time after the round_eval screen. Calling
+-- cash_out before it exists removes G.round_eval first, and the button is then built with no
+-- major to follow: it leaks off screen.
 local function find_cash_out_button()
 	for _, box in pairs(G.I.UIBOX) do
 		local found
@@ -697,13 +695,23 @@ local function find_cash_out_button()
 	end
 end
 
+-- True when the Cash Out wait can end: the button exists, the round was already cashed out
+-- (no round_eval and the state is past ROUND_EVAL), or time ran out. The same "no
+-- round_eval" holds before the round is evaluated, so those states keep waiting.
+function SPDRN._cashout_wait_over(button_exists, round_eval_built, state, timed_out)
+	if button_exists or timed_out then return true end
+	local S = G.STATES
+	local before_round_eval = state == S.SELECTING_HAND or state == S.HAND_PLAYED or state == S.DRAW_TO_HAND or state == S.NEW_ROUND
+	return not round_eval_built and state ~= S.ROUND_EVAL and not before_round_eval
+end
+
 MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
 	local button_deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
-		return find_cash_out_button() ~= nil or (G.round_eval == nil and G.STATE ~= G.STATES.ROUND_EVAL) or love.timer.getTime() >= button_deadline
+		return SPDRN._cashout_wait_over(find_cash_out_button() ~= nil, G.round_eval ~= nil, G.STATE, love.timer.getTime() >= button_deadline)
 	end, function()
 		G.FUNCS.cash_out(find_cash_out_button() or { config = {} })
 		SPDRN._await_cashout_transition(driver)
