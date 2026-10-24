@@ -12,7 +12,7 @@ which is a **required dependency**.
 ## Install
 
 1. Install [Lovely](https://github.com/ethangreen-dev/lovely-injector) (0.8 or newer) and
-   [Steamodded](https://github.com/Steamodded/smods) (1.0.0~BETA-1221a or newer).
+   [Steamodded](https://github.com/Steamodded/smods) (1.0.0~BETA-1814a or newer).
 2. Install [Balatro Multiplayer API](https://github.com/Balatro-Multiplayer/BalatroMultiplayerAPI).
 3. Put this repository's folder in your Balatro `Mods` directory.
 4. Launch the game and open **Speedrun** from the multiplayer menu.
