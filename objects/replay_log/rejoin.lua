@@ -92,6 +92,24 @@ function SPDRN._launch_rejoin(active)
 	-- beyond that snapshot by this mechanism -- whatever live re-sync happens after
 	-- MPAPI.join_lobby hands off to real play (unchanged, out of scope here) is what closes any
 	-- remaining gap, exactly as it already does today.
+	-- The race clocks restart from zero in the catch-up playback (SPDRN.begin_run), but the
+	-- race went on: carry them on from the recorded stream. `t` is milliseconds into the match
+	-- (the RLOG clock), so the match clock stands at the last recorded event's t and the clock
+	-- of the run in progress at the t its run_info was written. The time spent away is not in
+	-- the stream, so it is not counted; the clocks never go back to zero.
+	local last_t, run_t = 0, 0
+	for _, ev in ipairs(active.events or {}) do
+		if type(ev.t) == 'number' then
+			if ev.t > last_t then last_t = ev.t end
+			if ev.opcode == 'run_info' then run_t = ev.t end
+		end
+	end
+	local function restore_race_clocks()
+		local now = love.timer.getTime()
+		SPDRN._run_started_at = now - last_t / 1000
+		SPDRN._current_run_started_at = now - math.max(last_t - run_t, 0) / 1000
+	end
+
 	local session
 	session = {
 		bootstrap = bootstrap,
@@ -106,6 +124,7 @@ function SPDRN._launch_rejoin(active)
 			-- too) reads as tampering: live, the rejoined player's log came back
 			-- hash_mismatch. Close it now, without an END/CHK.
 			MPAPI.replay._run_active = false
+			restore_race_clocks()
 			local lobby = MPAPI.join_lobby(SPDRN.id, active.lobbyCode)
 			-- Opt out of on_lobby_connected's "match formed while practicing,
 			-- exit the run" behavior (api/mod_registry/focus.lua) -- we're
