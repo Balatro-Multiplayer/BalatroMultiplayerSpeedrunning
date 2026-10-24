@@ -506,7 +506,10 @@ local function replay_buy(args, ctx)
 		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
 		if not card then return false end
 		local is_booster = card.ability and card.ability.set == 'Booster'
-		G.FUNCS.buy_from_shop({ config = { id = is_booster and 'buy_and_use' or nil, ref_table = card } })
+		-- args[5]: the player pressed "Buy & Use" (a consumable bought and used at once).
+		-- Logs from before the flag existed have no args[5] and replay as a plain buy.
+		local bought_and_used = args and args[5] == true
+		G.FUNCS.buy_from_shop({ config = { id = (is_booster or bought_and_used) and 'buy_and_use' or nil, ref_table = card } })
 		if not is_booster then return false end
 		if driver then driver:pause() end
 		SPDRN._playback_wait_for(function()
