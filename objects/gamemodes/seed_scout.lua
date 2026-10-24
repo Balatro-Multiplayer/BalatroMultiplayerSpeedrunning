@@ -138,7 +138,7 @@ MPAPI.GameMode({
 
 		local key = SPDRN.resolve_back_key(self._scout_deck)
 		if G.GAME and key and G.P_CENTERS[key] then
-			G.GAME.viewed_back = G.P_CENTERS[key]
+			G.GAME.viewed_back = SPDRN.back_for_key(key)
 		end
 
 		if self._phase == 'scout' then

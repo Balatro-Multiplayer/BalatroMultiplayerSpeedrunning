@@ -30,8 +30,9 @@ local function capture_local_jokers()
 end
 
 local function capture_local_deck_back()
-	if G.GAME and G.GAME.viewed_back and G.GAME.viewed_back.key then
-		return G.GAME.viewed_back.key
+	local back = G.GAME and G.GAME.viewed_back
+	if back and back.effect and back.effect.center and back.effect.center.key then
+		return back.effect.center.key
 	end
 	return SPDRN.resolve_back_key(SPDRN._run_deck)
 end

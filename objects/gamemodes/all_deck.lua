@@ -101,7 +101,7 @@ MPAPI.GameMode({
 		SPDRN.teardown_existing_run()
 		local key = SPDRN.resolve_back_key(deck_name)
 		if G.GAME and key and G.P_CENTERS[key] then
-			G.GAME.viewed_back = G.P_CENTERS[key]
+			G.GAME.viewed_back = SPDRN.back_for_key(key)
 		end
 		G.FUNCS.start_run(nil, {
 			stake = 1,

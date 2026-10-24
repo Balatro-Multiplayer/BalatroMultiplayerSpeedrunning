@@ -50,7 +50,7 @@ end
 -- Resolve a deck reference to a Back center KEY. Accepts either a center key already (e.g.
 -- 'b_red', as produced by the ban-pick draft) or a display name (e.g. 'Blue Deck', as stored
 -- in lobby metadata). Returns nil if it matches no deck. The deck is applied at run start via
--- G.GAME.viewed_back = G.P_CENTERS[key] (see the gamemode start_run methods).
+-- G.GAME.viewed_back = SPDRN.back_for_key(deck) (see the gamemode start_run methods).
 function SPDRN.resolve_back_key(deck)
 	if not deck or deck == '' then
 		return nil
@@ -65,4 +65,16 @@ function SPDRN.resolve_back_key(deck)
 		end
 	end
 	return nil
+end
+
+-- G.GAME.viewed_back must be a Back object, not a raw center: Steamodded 26.x
+-- Card:set_sprites reads viewed_back.effect.center.sprite_args, and vanilla
+-- start_run reads viewed_back.name. Accepts a key or display name; nil if no deck matches.
+function SPDRN.back_for_key(deck)
+	local key = SPDRN.resolve_back_key(deck)
+	local center = key and G.P_CENTERS[key]
+	if not center then
+		return nil
+	end
+	return Back(center)
 end
