@@ -74,9 +74,6 @@ MPAPI.playback.register_rejoin_hooks(SPDRN.id, {
 	checkpoint_options = function()
 		return {
 			boundary_opcodes = SPDRN._CHECKPOINT_BOUNDARY_OPCODES,
-			run_index = function()
-				return SPDRN.current_run(MPAPI.get_current_lobby())
-			end,
 			pause_gate = SPDRN._ff_pause_gate,
 		}
 	end,
