@@ -59,6 +59,12 @@ SPDRN.setup_lobby_events = function(lobby)
 			and not (inst._forfeited and inst._forfeited[player_id]) then
 			MPAPI._handle_gamemode_result(inst, inst:on_player_forfeit(player_id))
 		end
+		-- The report waits for every seated player's result. A player who drops after
+		-- the others finished (a crash: seated until its grace runs out) never sends
+		-- one, so try the report again now that it counts as gone.
+		if SPDRN._match_result_pending then
+			SPDRN._maybe_report_result(SPDRN._current_winner_id)
+		end
 		update_game_buttons()
 	end)
 
