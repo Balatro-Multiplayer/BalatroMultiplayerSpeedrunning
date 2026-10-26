@@ -290,8 +290,8 @@ end
 -- needs this reactive two-state colour flip, which is SPDRN's own queueing concern.
 --
 -- A pillar the account's standing refuses (MPAPI.can_queue: Casual needs a valid or verified
--- account, Ranked a launcher-verified one) is greyed, and pressing it says why
--- (spdrn_game_select_standing_refused) instead of queueing.
+-- account, Ranked on the Official server a launcher-verified one) is greyed, and pressing it
+-- says why (spdrn_game_select_standing_refused) instead of queueing.
 local function build_queue_select_button(mode, is_disabled)
 	local el = MPAPI.ui_element(function()
 		local queued = SPDRN._queue_handles[mode.game_mode_stat_key] ~= nil
