@@ -314,7 +314,7 @@ local function build_checkpoint_picker()
 	-- (White Stake Triple/Stake Climb/All Deck) -- single-run formats (Gold Stake Single,
 	-- Challenge) always have run_idx=1 throughout, per SPDRN.current_run's own fallback.
 	local has_multiple_runs = #runs > 1
-	local ante_boundaries = SPDRN._checkpoint_ante_boundaries(session.checkpoint_index or {})
+	local ante_boundaries = MPAPI.playback.checkpoint_ante_boundaries(session.checkpoint_index or {})
 	local ante_boundary_i = 0
 
 	for _, run in ipairs(runs) do
@@ -324,7 +324,7 @@ local function build_checkpoint_picker()
 		if not has_multiple_runs or _picker_state.expanded_run == run.run_idx then
 			for _, ante in ipairs(run.antes_order) do
 				ante_boundary_i = ante_boundary_i + 1
-				local money = format_money_label(SPDRN._checkpoint_money_spent(session, ante_boundaries, ante_boundary_i))
+				local money = format_money_label(MPAPI.playback.checkpoint_money_spent(session, ante_boundaries, ante_boundary_i))
 				local first_entry = ante.blinds[1]
 				rows[#rows + 1] = build_ante_row(first_entry, money)
 				local key = run.run_idx .. ':' .. ante.ante

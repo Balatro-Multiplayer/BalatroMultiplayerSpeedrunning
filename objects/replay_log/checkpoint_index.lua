@@ -35,6 +35,3 @@ function SPDRN._build_checkpoint_index(session, on_built)
 		pause_gate = SPDRN._ff_pause_gate,
 	}, on_built)
 end
-
-SPDRN._checkpoint_ante_boundaries = MPAPI.playback.checkpoint_ante_boundaries
-SPDRN._checkpoint_money_spent = MPAPI.playback.checkpoint_money_spent
