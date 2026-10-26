@@ -94,7 +94,7 @@ SPDRN.setup_lobby_events = function(lobby)
 	end)
 
 	-- A rejoined player is ready to receive once its catch-up ends: send our location again.
-	lobby:on('player_catching_up', function(player_id, catching_up)
+	lobby:on(MPAPI.LobbyEvent.PLAYER_CATCHING_UP, function(player_id, catching_up)
 		if not catching_up and player_id ~= lobby.player_id then
 			SPDRN.rebroadcast_location()
 		end
