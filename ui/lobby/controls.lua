@@ -140,7 +140,11 @@ local function build_matchmaking_controls()
 end
 
 function SPDRN.lobby.refresh_mm_status()
-	if _mm_status_el then
+	if _mm_status_el and not MPAPI.BanPick.is_active() and not SPDRN.is_matchmaking() then
+		-- A private lobby's Draft ended with no run (the game ended first): rebuild the
+		-- view, so the private controls come back in place of the Draft.
+		MPAPI.refresh_current_view()
+	elseif _mm_status_el then
 		_mm_status_el:update()
 	elseif MPAPI.BanPick.is_active() then
 		-- A private lobby's initial view is build_private_controls(), which has no
