@@ -1,0 +1,10 @@
+{
+  "name": "MultiplayerSpeedrun",
+  "version_number": "1.0.0",
+  "website_url": "https://github.com/Balatro-Multiplayer/BalatroMultiplayerSpeedrunning",
+  "description": "Real-time speedrunning gamemodes, leaderboard, and timer tracking built on top of MultiplayerAPI.",
+  "dependencies": [
+    "Steamodded-Steamodded-1.1814.0",
+    "BalatroMultiplayer-MultiplayerAPI-1.0.0"
+  ]
+}
