@@ -76,11 +76,22 @@ SPDRN.setup_lobby_events = function(lobby)
 			SPDRN.Sender.forget_host(lobby)
 		end
 		refresh_private_view()
+		-- Send our location again: the player who came back lost every peer location.
+		if player_id ~= lobby.player_id then
+			SPDRN.rebroadcast_location()
+		end
 		-- §16.5: votes reset on a reconnect too, same as a leave -- a stale
 		-- unanimous vote from before the drop shouldn't fire again the instant
 		-- the reconnecting player's own client re-syncs.
 		L.seed_votes:reset()
 		L.draw_votes:reset()
+	end)
+
+	-- A rejoined player is ready to receive once its catch-up ends: send our location again.
+	lobby:on('player_catching_up', function(player_id, catching_up)
+		if not catching_up and player_id ~= lobby.player_id then
+			SPDRN.rebroadcast_location()
+		end
 	end)
 
 	lobby:on('connected', function()
