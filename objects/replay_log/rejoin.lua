@@ -18,11 +18,13 @@ local function read_run_info(args, bootstrap)
 end
 
 -- The race clocks restart from zero in the catch-up playback (SPDRN.begin_run), but the race went
--- on: carry them on from the recorded stream. `t` is milliseconds into the match (the RLOG clock),
--- so the match clock stands at the last recorded event's t and the clock of the run in progress at
--- the t its run_info was written. The time spent away is not in the stream (ticket 07 makes the
--- clock real time).
-local function restore_race_clocks(events)
+-- on, and the time away counts. `t` in the recorded stream is milliseconds into the match (the
+-- RLOG clock), so the run in progress began `run_t` after the race began.
+-- `race_started_local` is the server's race start on this client's clock (the lobby snapshot's
+-- race start): with it the clocks stand at real time, whatever the stream holds. Without it (the
+-- server has not seen the race begin) the clocks stand at the last recorded event instead, which
+-- leaves out the time away.
+function SPDRN.restore_race_clocks(events, race_started_local)
 	local last_t, run_t = 0, 0
 	for _, ev in ipairs(events or {}) do
 		if type(ev.t) == 'number' then
@@ -34,13 +36,18 @@ local function restore_race_clocks(events)
 			end
 		end
 	end
+	if race_started_local then
+		SPDRN._run_started_at = race_started_local
+		SPDRN._current_run_started_at = race_started_local + run_t / 1000
+		return
+	end
 	local now = love.timer.getTime()
 	SPDRN._run_started_at = now - last_t / 1000
 	SPDRN._current_run_started_at = now - math.max(last_t - run_t, 0) / 1000
 end
 
 local function attach(lobby, ctx)
-	restore_race_clocks(ctx.events)
+	SPDRN.restore_race_clocks(ctx.events, lobby:get_race_started_local())
 	-- The live lobby replaces the local playback one, which still holds SPDRN.lobby.ref and left
 	-- _lobby_kind on PRACTICE: wire SPDRN's lobby events to the real lobby (its result, end
 	-- screen, votes) and take its kind from the server-reported type, as the waiting-room
