@@ -3,15 +3,6 @@
 -- ui/reconnect_prompt.lua) and there's no active RLOG match run to hand off
 -- to instead (that's the OTHER branch of that file's Reconnect handler --
 -- this one only ever runs pre-match: waiting room or mid-ban-pick-draft).
--- The seed of the game this lobby has started: the server's, restored from the
--- snapshot, in a server-refereed lobby; otherwise the host's metadata mirror.
-function SPDRN.pending_start_seed(lobby)
-	local started = lobby._game and lobby._game.started
-	if MPAPI.has_server_referee(lobby) and started then
-		return started.seed
-	end
-	return (lobby:get_metadata() or {})._mp_pending_seed
-end
 
 -- The lobby kind of a lobby rejoined after a restart. Every other entry path
 -- (ui/main_menu/join.lua / create_lobby.lua / practice.lua) sets
@@ -35,24 +26,14 @@ MPAPI.register_lobby_reconnect(SPDRN.id, function(lobby)
 
 	SPDRN.setup_lobby_events(lobby)
 
-	-- Resume a ban-pick draft that was already in progress, if any. Restore
-	-- lobby._ban_pick from the host's own metadata mirror first (see
-	-- MPAPI.BanPick.broadcast_state's comment) -- a reconnecting player's own
-	-- lobby object never had this field populated any other way, since it's
-	-- assembled fresh from context.reconnected_lobby (api/lobby/public.lua),
-	-- which carries metadata but has no _ban_pick field of its own.
-	local meta = lobby:get_metadata() or {}
-	if not lobby._ban_pick and meta._mp_ban_pick_state then
-		lobby._ban_pick = meta._mp_ban_pick_state
-	end
-	if lobby._ban_pick and not lobby._ban_pick.complete then
-		local gm_def = meta.gamemode and MPAPI.GameModes[meta.gamemode]
-		if gm_def and gm_def.ban_pick then
-			MPAPI.BanPick.resume(
-				lobby,
-				SPDRN._ban_pick_config_for(gm_def),
-				SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, SPDRN.pending_start_seed(lobby))
-			)
-		end
+	-- Rejoin a game still in its Draft: the server's snapshot already
+	-- restored the Setup state (lobby._game.setup), so the game start runs
+	-- again and MPAPI.BanPick picks up where the Draft is, or finishes at once
+	-- when its result is in.
+	local started = lobby._game and lobby._game.started
+	local setup = lobby._game and lobby._game.setup
+	local in_setup = setup and (setup.open or next(setup.results or {}))
+	if MPAPI.has_server_referee(lobby) and started and not started.restarted and in_setup then
+		SPDRN.on_game_start(lobby, { seed = started.seed })
 	end
 end)

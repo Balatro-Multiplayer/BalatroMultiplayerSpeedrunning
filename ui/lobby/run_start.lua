@@ -306,11 +306,8 @@ function SPDRN.broadcast_start(seed)
 	seed = seed or SPDRN.generate_seed()
 	-- Mirrored into lobby metadata (persisted server-side, returned again in
 	-- context.reconnected_lobby.metadata on a crash-relaunch reconnect -- see
-	-- ui/reconnect_prompt.lua) so a player who crashes mid-ban-pick-draft can
-	-- still recover the match seed once the resumed draft completes on their
-	-- client -- the action broadcast itself (below) only ever reaches clients
-	-- connected at the moment it fires, same reasoning as
-	-- MPAPI.BanPick.broadcast_state's own metadata mirror.
+	-- ui/reconnect_prompt.lua): the action broadcast itself (below) only ever
+	-- reaches clients connected at the moment it fires.
 	if not MPAPI.has_server_referee(lobby) then
 		lobby:set_metadata({ _mp_pending_seed = seed })
 	end

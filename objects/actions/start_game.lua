@@ -1,9 +1,6 @@
--- Builds the MPAPI.BanPick config for `gm_def`'s draft -- shared between the
--- normal on_receive flow below (a fresh draft, kicked off by the
--- spdrn_start_game broadcast) and ui/lobby/reconnect.lua's crash-relaunch
--- resume path (MPAPI.BanPick.resume into a draft already in progress) --
--- both need the EXACT same shape (pool/schedule/tile-decoration/action-key
--- wiring), so this is the one place that shape is written.
+-- Builds the MPAPI.BanPick config for `gm_def`'s Draft. The server runs the
+-- Draft as a Setup step (ADR 0003); the host sends the items `build_pool`
+-- makes and the server samples the pool from them.
 function SPDRN._ban_pick_config_for(gm_def)
 	return {
 		pool_size = gm_def.ban_pick.pool_size,
@@ -11,22 +8,13 @@ function SPDRN._ban_pick_config_for(gm_def)
 		schedule = gm_def.ban_pick.schedule,
 		build_pool = gm_def.ban_pick.build_pool,
 		decorate_tile = gm_def.ban_pick.decorate_tile,
-		state_action = 'spdrn_ban_pick_state',
-		ban_action = 'spdrn_ban_pick_ban',
 		on_refresh = function()
 			SPDRN.lobby.refresh_mm_status()
 		end,
 	}
 end
 
--- Builds the on_complete callback for `gm_def`'s draft -- also shared with
--- the reconnect-resume path. `seed` is passed explicitly rather than closed
--- over a spdrn_start_game action message's own params: a resumed draft has
--- no such message (the reconnecting client crashed before or during the
--- original broadcast), so it reads the seed SPDRN.broadcast_start mirrored
--- into lobby metadata instead (see ui/lobby/run_start.lua) -- passing it in
--- explicitly here keeps this one function correct for both callers instead
--- of needing two near-duplicate versions.
+-- Builds the on_complete callback for `gm_def`'s Draft.
 function SPDRN._ban_pick_on_complete_for(gm_def, meta, lobby, seed)
 	return function(survivors, ban_order)
 		-- keep == 0 bans every pool item, so `survivors` is always empty -- the ban
@@ -65,7 +53,7 @@ function SPDRN.on_game_start(lobby, params)
 
 	if SPDRN.get_lobby_kind() == SPDRN.LobbyKind.PRACTICE then
 		proceed(meta.deck)
-	elseif gm_def.ban_pick and (SPDRN.is_matchmaking() or gm_def.always_draft) then
+	elseif gm_def.ban_pick and MPAPI.has_server_referee(lobby) and (SPDRN.is_matchmaking() or gm_def.always_draft) then
 		-- Matchmaking (always 2 players), or any lobby kind for a gamemode that opts into
 		-- always drafting (e.g. All Deck, which needs its draft to decide play order in
 		-- private lobbies too, not just matchmaking): run the deck draft, then the synced
@@ -74,6 +62,7 @@ function SPDRN.on_game_start(lobby, params)
 		-- controls (see build_matchmaking_controls) for matchmaking; private lobbies render
 		-- it the same way via SPDRN.lobby.build_controls's is_matchmaking() branch -- an
 		-- always_draft private lobby is treated as "matchmaking-shaped" for this one screen.
+		-- The Draft runs on the server (MPAPI.Setup), so only a server-refereed lobby has one.
 		MPAPI.BanPick.start(
 			lobby,
 			SPDRN._ban_pick_config_for(gm_def),
