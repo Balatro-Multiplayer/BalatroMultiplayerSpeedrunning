@@ -110,35 +110,15 @@ end
 -- objects/replay_log/perspective_switch.lua's cross-player switch, where `session.bootstrap` is
 -- simply a DIFFERENT player's own bootstrap over the SAME shared timeline.
 function SPDRN._restart_session_and_seek(session, target_event_index, on_ready)
-	if session.driver then
-		-- Must stop the OLD driver before _start_playback tears the run down, or it would keep
-		-- ticking (MPAPI.playback._active_drivers still holds it) against a rebuilt game state
-		-- it no longer matches.
-		session.driver:stop()
-	end
-	SPDRN._start_playback(session.bootstrap, function()
-		-- Re-shows whatever seek overlay text is currently active -- SPDRN._start_playback just
-		-- tore down and rebuilt the room, which silently orphans the overlay UIBox (see
-		-- SPDRN._reshow_seek_overlay's own comment, ui/replay/checkpoint_picker.lua). No-op if
-		-- nothing is currently supposed to be showing.
-		SPDRN._reshow_seek_overlay()
-		local driver = MPAPI.playback.new_driver(session.timeline, {
-			mod_id = 'spdrn',
-			pov_player_id = session.my_id,
-			schema_version = session.bootstrap.schema_version,
-			-- A Replay from the browser plays at the recorded pace with a speed control;
-			-- rejoin leaves this unset and keeps one entry per frame.
-			paced = session.paced,
-			on_complete = session.on_session_complete,
-		})
-		driver:finish()
-		driver:fast_forward_to(target_event_index, {
-			pause_gate = SPDRN._ff_pause_gate,
-			on_done = function()
-				on_ready(driver)
-			end,
-		})
-	end)
+	MPAPI.playback.restart_session_and_seek(session, target_event_index, on_ready, {
+		mod_id = 'spdrn',
+		start_run = SPDRN._start_playback,
+		pause_gate = SPDRN._ff_pause_gate,
+		-- SPDRN._start_playback just tore down and rebuilt the room, which silently orphans the
+		-- seek overlay UIBox (see SPDRN._reshow_seek_overlay's comment, ui/replay/checkpoint_picker.lua).
+		-- No-op if nothing is currently supposed to be showing.
+		on_run_started = SPDRN._reshow_seek_overlay,
+	})
 end
 
 -- Starts viewing a replay/rejoin session, landing at `target_event_index` (defaults to 1, the
