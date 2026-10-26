@@ -248,7 +248,7 @@ end
 -- the real match data already imported locally -- left as a follow-up, not solved here.
 local function find_roster(session)
 	for _, entry in ipairs(session.timeline) do
-		if entry.opcode == 'lobby_info' and entry.args and entry.args.players then
+		if entry.opcode == MPAPI.OPCODE.LOBBY_INFO and entry.args and entry.args.players then
 			return entry.args.players
 		end
 	end

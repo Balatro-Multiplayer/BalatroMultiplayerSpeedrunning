@@ -18,7 +18,12 @@ function SPDRN._ff_pause_gate()
 	return SPDRN._pending_run_transition ~= nil
 end
 
-SPDRN._CHECKPOINT_BOUNDARY_OPCODES = { 'select_blind', 'skip_blind', 'run_died', 'run_restarted' }
+SPDRN._CHECKPOINT_BOUNDARY_OPCODES = {
+	MPAPI.OPCODE.SELECT_BLIND,
+	MPAPI.OPCODE.SKIP_BLIND,
+	MPAPI.OPCODE.RUN_DIED,
+	MPAPI.OPCODE.RUN_RESTARTED,
+}
 
 function SPDRN._build_checkpoint_index(session, on_built)
 	MPAPI.playback.build_checkpoint_index(session, {

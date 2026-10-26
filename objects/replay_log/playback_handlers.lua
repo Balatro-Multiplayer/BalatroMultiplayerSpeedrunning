@@ -87,13 +87,13 @@ local function highlight_resolved_hand_indices(indices, refs, ctx, opcode)
 	end
 end
 
-MPAPI.playback.register_handler('spdrn', 'manifest', function(_args, _ctx) end)
-MPAPI.playback.register_handler('spdrn', 'end', function(_args, _ctx) end)
-MPAPI.playback.register_handler('spdrn', 'chk', function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.MANIFEST, function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.END, function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.CHK, function(_args, _ctx) end)
 -- Pure bookkeeping (see record.lua's ease_dollars hook) -- the real dollar
 -- change already happens as a side effect of whatever action caused it
 -- (buy/sell/etc, each already replayed by its own handler), nothing to apply.
-MPAPI.playback.register_handler('spdrn', 'money_delta', function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.MONEY_DELTA, function(_args, _ctx) end)
 
 -- Same real-UIBox technique PvP's equivalent handler needed (confirmed live
 -- there, a crash risk from calling select_blind before G.blind_select's own
@@ -302,7 +302,7 @@ local function wait_for_blind_select_screen(driver, on_ready)
 	end)
 end
 
-MPAPI.playback.register_handler('spdrn', 'select_blind', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.SELECT_BLIND, function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
@@ -314,7 +314,7 @@ MPAPI.playback.register_handler('spdrn', 'select_blind', function(_args, ctx)
 	end)
 end)
 
-MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.SKIP_BLIND, function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
@@ -342,11 +342,11 @@ end)
 -- per-card skip-and-warn behavior in highlight_resolved_hand_indices -- only
 -- the all-failed case needs its own guard here, since vanilla can't handle a
 -- literally empty selection.
-MPAPI.playback.register_handler('spdrn', 'play', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PLAY, function(args, ctx)
 	if not ctx.is_pov then return end
 	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
-	highlight_resolved_hand_indices(indices, refs, ctx, 'play')
+	highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.PLAY)
 	-- G.hand can be nil here too (highlight_resolved_hand_indices already
 	-- warned and no-opped in that case, above) -- checked via G.hand's own
 	-- presence rather than assuming it survived that call, not just #==0.
@@ -360,11 +360,11 @@ MPAPI.playback.register_handler('spdrn', 'play', function(args, ctx)
 	G.FUNCS.play_cards_from_highlighted()
 end)
 
-MPAPI.playback.register_handler('spdrn', 'discard', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.DISCARD, function(args, ctx)
 	if not ctx.is_pov then return end
 	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
-	highlight_resolved_hand_indices(indices, refs, ctx, 'discard')
+	highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.DISCARD)
 	local highlighted = G.hand and G.hand.highlighted
 	if not highlighted or #highlighted == 0 then
 		if G.hand then
@@ -410,10 +410,10 @@ local function resolve_own_card(ctx, ref, area, idx, opcode)
 	return card
 end
 
-MPAPI.playback.register_handler('spdrn', 'sell', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.SELL, function(args, ctx)
 	if not ctx.is_pov then return end
 	local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
-	local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'sell')
+	local card = resolve_own_card(ctx, ref, area_object(area_id), idx, MPAPI.OPCODE.SELL)
 	if card then
 		card:sell_card()
 		SMODS.calculate_context({ selling_card = true, card = card })
@@ -464,7 +464,7 @@ local function replay_buy(args, ctx)
 	local driver = ctx.driver
 	with_shop_ready(ctx, function()
 		local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
-		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
+		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, MPAPI.OPCODE.BUY)
 		if not card then return false end
 		local is_booster = card.ability and card.ability.set == 'Booster'
 		G.FUNCS.buy_from_shop({ config = { id = MPAPI.playback.buy_button_id(card, args), ref_table = card } })
@@ -478,29 +478,29 @@ local function replay_buy(args, ctx)
 		return true
 	end)
 end
-MPAPI.playback.register_handler('spdrn', 'buy', replay_buy)
-MPAPI.playback.register_handler('spdrn', 'open_pack', replay_buy)
-MPAPI.playback.register_handler('spdrn', 'voucher', replay_buy)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.BUY, replay_buy)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.OPEN_PACK, replay_buy)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.VOUCHER, replay_buy)
 
-MPAPI.playback.register_handler('spdrn', 'use', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.USE, function(args, ctx)
 	if not ctx.is_pov then return end
 	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
-	local card = resolve_own_card(ctx, ref, G.consumeables, idx, 'use')
+	local card = resolve_own_card(ctx, ref, G.consumeables, idx, MPAPI.OPCODE.USE)
 	if not card then return end
-	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'use') end
+	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, MPAPI.OPCODE.USE) end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 
-MPAPI.playback.register_handler('spdrn', 'pack_pick', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PACK_PICK, function(args, ctx)
 	if not ctx.is_pov then return end
 	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
-	local card = resolve_own_card(ctx, ref, G.pack_cards, idx, 'pack_pick')
+	local card = resolve_own_card(ctx, ref, G.pack_cards, idx, MPAPI.OPCODE.PACK_PICK)
 	if not card then return end
-	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'pack_pick') end
+	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, MPAPI.OPCODE.PACK_PICK) end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 
-MPAPI.playback.register_handler('spdrn', 'pack_skip', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PACK_SKIP, function(_args, ctx)
 	if ctx.is_pov then G.FUNCS.skip_booster({ config = {} }) end
 end)
 
@@ -510,7 +510,7 @@ end)
 -- ("attempt to get length of field 'cards' (a nil value)",
 -- functions/button_callbacks.lua, inside reroll_shop's own deferred
 -- G.E_MANAGER event, per the lovely game-dump).
-MPAPI.playback.register_handler('spdrn', 'reroll', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.REROLL, function(_args, ctx)
 	if not ctx.is_pov then return end
 	with_shop_ready(ctx, function()
 		G.FUNCS.reroll_shop({ config = {} })
@@ -559,7 +559,7 @@ end)
 -- beyond #perm from area.cards (new_cards below is only ever built out to
 -- #perm), the same data loss as the too-short case, just silent instead of
 -- an obvious nil-splice.
-MPAPI.playback.register_handler('spdrn', 'reorder', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.REORDER, function(args, ctx)
 	if not ctx.is_pov then return end
 	local area_id, perm, moved = args and args[1], args and args[2], args and args[3]
 	local area = area_object(area_id)
@@ -659,7 +659,7 @@ function SPDRN._cashout_wait_over(button_exists, round_eval_built, state, timed_
 	return not round_eval_built and state ~= S.ROUND_EVAL and not before_round_eval
 end
 
-MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.CASHOUT, function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
