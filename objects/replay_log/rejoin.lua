@@ -5,10 +5,12 @@
 -- SPDRN is a race, so nothing waits for a racer who is catching up and it sets no catch-up limit.
 
 -- The catch-up must know every deck of a multi-run format (White Stake Triple, All Deck): with
--- only run 1's deck, the run after the first win restarts on that same deck.
+-- only run 1's deck, the run after the first win restarts on that same deck. A drafted deck
+-- (Seed Scout) is one { key, stake } entry that run_info does not carry: without it the catch-up
+-- booted on the default deck at stake 1.
 local function read_lobby_info(args, bootstrap)
 	local decks = args.decks
-	if type(decks) == 'table' and #decks > 1 then
+	if type(decks) == 'table' and (#decks > 1 or type(decks[1]) == 'table') then
 		bootstrap.deck = decks
 	end
 end
