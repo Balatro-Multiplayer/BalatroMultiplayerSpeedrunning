@@ -105,22 +105,6 @@ local function do_select_blind()
 	G.FUNCS.select_blind({ config = { ref_table = G.P_BLINDS[blind_key] }, UIBox = G.blind_select })
 end
 
--- Leaving the shop (the "Next Round" button, G.FUNCS.toggle_shop) has no RLOG_CODE
--- of its own anywhere in this codebase -- it was simply never recorded. A recorded
--- select_blind/skip_blind opcode can only exist because the real player already
--- left the shop to reach that screen, so synthesizing the click here (once, only
--- when actually still in the shop) is safe and correct for every recording,
--- including every one already stored server-side before this fix existed --
--- unlike a fix on the recording side, this doesn't need new data to take effect.
--- Confirmed live: without this, select_blind's own wait_for (below) waits forever
--- once the driver correctly stops advancing during it (see that fix's own
--- comment) -- replay would hang at the shop on every single round transition.
-local function leave_shop_if_needed()
-	if G.STATE == G.STATES.SHOP then
-		G.FUNCS.toggle_shop({ config = {} })
-	end
-end
-
 -- Defensive readiness gate for any opcode that touches the shop's own card
 -- areas (reroll/buy/voucher/open_pack/sell). Confirmed live: G.shop_jokers can
 -- read non-nil while G.shop_jokers.cards is itself still nil -- checked once
@@ -146,31 +130,8 @@ end
 -- Booster Pack needs a FURTHER wait afterward, for the pack it opens -- see
 -- replay_buy below) -- anything else (including no return at all) resumes
 -- immediately once fn() returns, same as before.
-local SHOP_READY_TIMEOUT_SECONDS = 10
 local function with_shop_ready(ctx, fn)
-	if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-		if not fn() and ctx.driver then ctx.driver:play() end
-		return
-	end
-	local driver = ctx.driver
-	if driver then driver:pause() end
-	local deadline = love.timer.getTime() + SHOP_READY_TIMEOUT_SECONDS
-	SPDRN._playback_wait_for(function()
-		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-			return true
-		end
-		if love.timer.getTime() >= deadline then
-			MPAPI.sendWarnMessage('[replay] shop never became ready after ' .. SHOP_READY_TIMEOUT_SECONDS .. 's -- giving up on this action and resuming')
-			return true
-		end
-		return false
-	end, function()
-		local deferred = false
-		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-			deferred = fn()
-		end
-		if not deferred and driver then driver:play() end
-	end)
+	MPAPI.playback.with_shop_ready(ctx, fn, SPDRN._playback_wait_for)
 end
 
 -- SPDRN._playback_wait_for is its own independent poll (Game:update, see
@@ -321,7 +282,7 @@ end
 -- real-time timeout instead of waiting indefinitely.
 local BLIND_SELECT_SCREEN_TIMEOUT_SECONDS = 10
 local function wait_for_blind_select_screen(driver, on_ready)
-	leave_shop_if_needed()
+	MPAPI.playback.leave_shop_if_needed()
 	local deadline = love.timer.getTime() + BLIND_SELECT_SCREEN_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
 		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0 then
@@ -360,11 +321,7 @@ MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
 	wait_for_blind_select_screen(driver, function()
 		local blind_before = G.GAME.blind_on_deck
 		local function do_skip_blind()
-			-- vanilla's skip reads the tag from the first tag_container of the UIBox it is handed;
-			-- G.blind_select holds all three panels, so its first one is always the Small blind's.
-			-- Hand it the current blind's own panel (a replayed Big skip granted the Small tag).
-			local panel = G.blind_select_opts and G.blind_select_opts[string.lower(G.GAME.blind_on_deck or 'Small')]
-			G.FUNCS.skip_blind({ UIBox = panel or G.blind_select })
+			G.FUNCS.skip_blind({ UIBox = MPAPI.playback.current_blind_panel() })
 		end
 		do_skip_blind()
 		wait_for_skip_applied(driver, do_skip_blind, function()
@@ -510,10 +467,7 @@ local function replay_buy(args, ctx)
 		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
 		if not card then return false end
 		local is_booster = card.ability and card.ability.set == 'Booster'
-		-- args[5]: the player pressed "Buy & Use" (a consumable bought and used at once).
-		-- Logs from before the flag existed have no args[5] and replay as a plain buy.
-		local bought_and_used = args and args[5] == true
-		G.FUNCS.buy_from_shop({ config = { id = (is_booster or bought_and_used) and 'buy_and_use' or nil, ref_table = card } })
+		G.FUNCS.buy_from_shop({ config = { id = MPAPI.playback.buy_button_id(card, args), ref_table = card } })
 		if not is_booster then return false end
 		if driver then driver:pause() end
 		SPDRN._playback_wait_for(function()
