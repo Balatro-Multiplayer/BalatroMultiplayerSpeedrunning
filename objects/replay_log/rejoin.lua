@@ -81,6 +81,9 @@ MPAPI.playback.register_rejoin_hooks(SPDRN.id, {
 		SPDRN._active_replay_session = session
 	end,
 	attach = attach,
+	resumed = function()
+		SPDRN.rebroadcast_location()
+	end,
 	aborted = function()
 		SPDRN._active_replay_session = nil
 	end,
