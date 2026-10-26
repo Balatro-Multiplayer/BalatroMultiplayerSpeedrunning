@@ -1,7 +1,7 @@
 -- SPDRN's side of the checkpoint index. The index itself (build, ante boundaries, money labels)
 -- is MPAPI's: BalatroMultiplayerAPI/api/playback/checkpoint_index.lua. SPDRN adds what is its own:
 -- the run counter, the opcodes that change a run, and the pause gate below.
--- SPDRN._seek_to_checkpoint (checkpoint_seek.lua) and SPDRN._launch_rejoin (rejoin.lua) read it.
+-- SPDRN._seek_to_checkpoint (checkpoint_seek.lua) and the rejoin hooks (rejoin.lua) read it.
 
 -- Shared pause_gate for every fast_forward_to call this mod makes (index-building, seeking,
 -- rejoin's shortened catch-up alike): a tight same-frame dispatch loop can race ahead of
@@ -18,10 +18,12 @@ function SPDRN._ff_pause_gate()
 	return SPDRN._pending_run_transition ~= nil
 end
 
+SPDRN._CHECKPOINT_BOUNDARY_OPCODES = { 'select_blind', 'skip_blind', 'run_died', 'run_restarted' }
+
 function SPDRN._build_checkpoint_index(session, on_built)
 	MPAPI.playback.build_checkpoint_index(session, {
 		mod_id = 'spdrn',
-		boundary_opcodes = { 'select_blind', 'skip_blind', 'run_died', 'run_restarted' },
+		boundary_opcodes = SPDRN._CHECKPOINT_BOUNDARY_OPCODES,
 		run_index = function()
 			return SPDRN.current_run(MPAPI.get_current_lobby())
 		end,
