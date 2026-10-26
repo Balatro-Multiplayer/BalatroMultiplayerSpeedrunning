@@ -50,6 +50,7 @@ end
 
 local function attach(lobby, ctx)
 	SPDRN.restore_race_clocks(ctx.events, lobby:get_race_started_local())
+	SPDRN.restore_seed_scout_clocks(lobby:get_gamemode_instance(), ctx.events, lobby:get_race_started_local())
 	-- The live lobby replaces the local playback one, which still holds SPDRN.lobby.ref and left
 	-- _lobby_kind on PRACTICE: wire SPDRN's lobby events to the real lobby (its result, end
 	-- screen, votes) and take its kind from the server-reported type, as the waiting-room
