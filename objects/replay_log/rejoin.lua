@@ -31,7 +31,7 @@ function SPDRN.restore_race_clocks(events, race_started_local)
 			if ev.t > last_t then
 				last_t = ev.t
 			end
-			if ev.opcode == 'run_info' then
+			if ev.opcode == MPAPI.OPCODE.RUN_INFO then
 				run_t = ev.t
 			end
 		end
