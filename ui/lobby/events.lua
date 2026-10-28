@@ -21,12 +21,15 @@ SPDRN.setup_lobby_events = function(lobby)
 		if L.buttons.start_game then
 			L.buttons.start_game:update()
 		end
+		if L.buttons.party_find_game then
+			L.buttons.party_find_game:update()
+		end
 		SPDRN.refresh_matchmaking_status()
 	end
 
-	-- A private lobby's group panel (ui/lobby/group_panel.lua) says whether
-	-- the lobby may queue as a group from its size, so a join or leave
-	-- rebuilds the view as a metadata change does.
+	-- The Party lobby's Find Game (ui/lobby/controls.lua) and group panel
+	-- follow the lobby's size, so a join or leave rebuilds the view as a
+	-- metadata change does.
 	local function refresh_private_view()
 		if not SPDRN.is_matchmaking() then
 			MPAPI.refresh_current_view()

@@ -1,5 +1,5 @@
--- Group casual queue (MPAPI.matchmaking.group): the host of a private lobby
--- queues the whole lobby for a casual mode; the group meets strangers in a
+-- Group casual queue (MPAPI.matchmaking.group): the host of a Party lobby
+-- (MPAPI.Party) queues the whole lobby for a casual mode; the group meets strangers in a
 -- public match and comes back to this lobby (same code, same host) after it.
 -- MPAPI runs the queue; this wires its handles like a solo casual queue's
 -- (objects/matchmaking/queue.lua) and says how to rejoin the home lobby.
@@ -177,8 +177,12 @@ function SPDRN.group_mode_available(lobby, key)
 	return false
 end
 
--- The lobby's Group Queue button: pick a mode from the casual pillars.
-G.FUNCS.spdrn_group_queue = function()
+-- The Party lobby host's Find Game: the casual pillars, each QUEUE queueing the party.
+G.FUNCS.spdrn_party_find_game = function()
+	local L = SPDRN.lobby
+	if not MPAPI.Party.find_game_enabled(MPAPI.Party.find_game_facts(L.ref, L.ready)) then
+		return
+	end
 	MPAPI.pages.show('spdrn_game_select', { intent = 'find_game', group = true })
 end
 

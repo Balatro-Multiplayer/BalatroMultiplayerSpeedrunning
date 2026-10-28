@@ -33,6 +33,16 @@ local function create_lobby_with_gamemode(key)
 	end)
 end
 
+-- A Party lobby (MPAPI.Party): no gamemode of its own; its players queue together for a
+-- Casual mode (objects/matchmaking/group_queue.lua) and come back to it after the race.
+G.FUNCS.spdrn_select_party = function()
+	G.FUNCS.exit_overlay_menu()
+	MPAPI.Party.create(SPDRN.id, function(lobby)
+		SPDRN._lobby_kind = SPDRN.LobbyKind.PRIVATE
+		SPDRN.setup_lobby_events(lobby)
+	end)
+end
+
 G.FUNCS.spdrn_select_white_stake_triple = function()
 	create_lobby_with_gamemode(SPDRN.Gamemode.WHITE_STAKE_TRIPLE)
 end

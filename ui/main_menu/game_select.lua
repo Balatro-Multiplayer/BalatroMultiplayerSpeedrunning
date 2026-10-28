@@ -33,6 +33,8 @@ local CHIP_ROW = {
 	seed_scout = 6,
 	challenge = 7,
 }
+-- The Party pillar has no art of its own yet: it shows All Deck's chip.
+CHIP_ROW.party = CHIP_ROW.all_deck
 
 -- The name plate's background/border colour, per chip row -- sampled from each chip icon's own
 -- two dominant colours (circle fill + symbol) rather than a colour picked by hand, so the plate
@@ -59,7 +61,7 @@ local DESCRIPTION = {
 	[SPDRN.Gamemode.STAKE_CLIMB] = { 'Every Stake', 'in Order.' },
 }
 
--- Practice and Create Lobby show all six gamemodes as plain pillars.
+-- Practice and Create Lobby show all six gamemodes as plain pillars (Create Lobby adds Party, below).
 local PRACTICE_LOBBY_MODES = {
 	{ key = SPDRN.Gamemode.WHITE_STAKE_TRIPLE, name = { 'White Stake', 'Triple' }, chip_row = CHIP_ROW.white_stake_triple,
 		practice_button = 'spdrn_practice_white', lobby_button = 'spdrn_select_white_stake_triple' },
@@ -74,6 +76,16 @@ local PRACTICE_LOBBY_MODES = {
 	{ key = SPDRN.Gamemode.STAKE_CLIMB, name = 'Stake Climb', chip_row = CHIP_ROW.stake_climb,
 		practice_button = 'spdrn_practice_stake_climb', lobby_button = 'spdrn_select_stake_climb' },
 }
+
+-- Create Lobby adds the Party pillar (MPAPI.Party): a lobby with no gamemode whose players
+-- queue together for a Casual mode. Its name and description are localized at build time.
+local PARTY_MODE = { key = SPDRN.LobbyKind.PARTY, name_key = 'k_party', desc_keys = { 'k_party_desc_1', 'k_party_desc_2' },
+	chip_row = CHIP_ROW.party, lobby_button = 'spdrn_select_party' }
+local CREATE_LOBBY_MODES = {}
+for _, mode in ipairs(PRACTICE_LOBBY_MODES) do
+	CREATE_LOBBY_MODES[#CREATE_LOBBY_MODES + 1] = mode
+end
+CREATE_LOBBY_MODES[#CREATE_LOBBY_MODES + 1] = PARTY_MODE
 
 -- Find Game only offers the two matchmade gamemodes, each as a Casual/Ranked pair -- matching
 -- the old Find Game overlay's Ranked x Casual x White x Gold matrix, just as 4 pillars instead
@@ -96,7 +108,7 @@ local FIND_GAME_MODES = {
 		ranked = false, game_mode_stat_key = SPDRN.Gamemode.GOLD_STAKE_SINGLE },
 }
 
--- The casual entries: what a private lobby may queue as a group
+-- The casual entries: what a Party lobby may queue as a group
 -- (objects/matchmaking/group_queue.lua).
 SPDRN.GROUP_QUEUE_MODES = {}
 for _, mode in ipairs(FIND_GAME_MODES) do
@@ -198,7 +210,14 @@ local function build_description_box(mode, intent)
 		local minutes = gm and gm.duration_cap_seconds and math.floor(gm.duration_cap_seconds / 60)
 		caption = minutes and (minutes .. 'm Time Limit') or ''
 	end
-	return MPAPI.ui_pillar_description_box({ lines = DESCRIPTION[mode.key] or {}, caption = caption })
+	local lines = DESCRIPTION[mode.key] or {}
+	if mode.desc_keys then
+		lines = {}
+		for _, key in ipairs(mode.desc_keys) do
+			lines[#lines + 1] = localize(key)
+		end
+	end
+	return MPAPI.ui_pillar_description_box({ lines = lines, caption = caption })
 end
 
 -- One half (Queue or In Game) of the find_game stat box, styled after the base game's own
@@ -256,6 +275,10 @@ local function build_order_card()
 end
 
 local function stat_box_for(mode, intent)
+	if mode == PARTY_MODE then
+		local Group = MPAPI.matchmaking.group
+		return MPAPI.ui_pillar_stat_box({ label = 'Players', value = Group.MIN_SIZE .. '-' .. Group.MAX_SIZE, value_colour = G.C.MONEY })
+	end
 	if intent == 'create_lobby' then
 		local gm = MPAPI.GameModes[mode.key]
 		local players = gm and (tostring(gm:get_min_players(MPAPI.LobbyType.PRIVATE)) .. '-' .. tostring(gm:get_max_players(MPAPI.LobbyType.PRIVATE))) or '?'
@@ -410,12 +433,15 @@ end
 -- core.lua) owns the controller for this page's lifetime: hand `.definition` to build(), and
 -- call `:dispose()` from the page's own dispose() hook so every tracked chip icon gets
 -- :remove()'d -- see api/ui_pillar_row.lua's header comment for why that's required.
--- `group` (find_game only) builds the casual pillars for queueing the current private lobby
+-- `group` (find_game only) builds the casual pillars for queueing the current Party lobby
 -- as a group, with a back-to-lobby header above them.
 function SPDRN.build_game_select_ui(intent, group)
 	intent = intent or 'practice'
 	group = group and intent == 'find_game'
-	local modes = group and SPDRN.GROUP_QUEUE_MODES or intent == 'find_game' and FIND_GAME_MODES or PRACTICE_LOBBY_MODES
+	local modes = group and SPDRN.GROUP_QUEUE_MODES
+		or intent == 'find_game' and FIND_GAME_MODES
+		or intent == 'create_lobby' and CREATE_LOBBY_MODES
+		or PRACTICE_LOBBY_MODES
 
 	local items = {}
 	for _, mode in ipairs(modes) do
@@ -429,7 +455,7 @@ function SPDRN.build_game_select_ui(intent, group)
 			icon = build_chip_sprite(mode.chip_row),
 			select = build_select(mode, intent, is_disabled, group),
 			name_plate = MPAPI.ui_pillar_name_plate({
-				lines = mode.name,
+				lines = mode.name_key and localize(mode.name_key) or mode.name,
 				bg_colour = darken(colours.bg, 0.3),
 				outline_colour = colours.icon,
 			}),

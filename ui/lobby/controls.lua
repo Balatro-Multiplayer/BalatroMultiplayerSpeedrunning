@@ -100,17 +100,52 @@ local function build_private_controls()
 	row_nodes[#row_nodes + 1] = code_panel()
 	row_nodes[#row_nodes + 1] = b.leave.node
 
+	return {
+		n = G.UIT.C,
+		config = { align = 'cm', padding = 0.1, r = 0.1, emboss = 0.1, colour = G.C.L_BLACK, mid = true },
+		nodes = { { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = row_nodes } },
+	}
+end
+
+-- A Party lobby (MPAPI.Party) has no lobby options and no deck: the host has Find Game,
+-- every other player a Ready toggle. While the party queues, the group panel
+-- (ui/lobby/group_panel.lua) says where it is.
+local function build_party_controls()
+	_mm_status_el = nil
+	local b = SPDRN.lobby.buttons
+	local lobby = SPDRN.lobby.ref
+	local row_nodes = {}
+	if lobby.is_host then
+		row_nodes[#row_nodes + 1] = b.party_find_game.node
+	else
+		row_nodes[#row_nodes + 1] = b.ready.node
+	end
+	row_nodes[#row_nodes + 1] = code_panel()
+	row_nodes[#row_nodes + 1] = b.leave.node
+
 	local rows = { { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = row_nodes } }
-	-- Queue the whole lobby for a casual match (ui/lobby/group_panel.lua).
-	local group_panel = SPDRN.lobby.build_group_panel and SPDRN.lobby.build_group_panel()
+	local group_panel = SPDRN.lobby.build_group_panel(lobby)
 	if group_panel then
 		rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = { group_panel } }
 	end
-
 	return {
 		n = G.UIT.C,
 		config = { align = 'cm', padding = 0.1, r = 0.1, emboss = 0.1, colour = G.C.L_BLACK, mid = true },
 		nodes = rows,
+	}
+end
+
+-- A joiner before the host's metadata arrives: only what every lobby kind has.
+local function build_pending_controls()
+	_mm_status_el = nil
+	local b = SPDRN.lobby.buttons
+	return {
+		n = G.UIT.C,
+		config = { align = 'cm', padding = 0.1, r = 0.1, emboss = 0.1, colour = G.C.L_BLACK, mid = true },
+		nodes = { { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
+			code_panel(),
+			b.leave.node,
+		} } },
 	}
 end
 
@@ -172,6 +207,13 @@ function SPDRN.lobby.build_controls()
 	-- actual run, so there's no "fall back to private controls mid-draft" case to handle.
 	if SPDRN.is_matchmaking() or MPAPI.BanPick.is_active() then
 		return build_matchmaking_controls()
+	end
+	local lobby = SPDRN.lobby.ref
+	if not MPAPI.Party.kind_known(lobby) then
+		return build_pending_controls()
+	end
+	if MPAPI.Party.is_party_lobby(lobby) then
+		return build_party_controls()
 	end
 	return build_private_controls()
 end
