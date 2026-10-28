@@ -21,12 +21,15 @@ SPDRN.setup_lobby_events = function(lobby)
 		if L.buttons.start_game then
 			L.buttons.start_game:update()
 		end
+		if L.buttons.party_find_game then
+			L.buttons.party_find_game:update()
+		end
 		SPDRN.refresh_matchmaking_status()
 	end
 
-	-- A private lobby's group panel (ui/lobby/group_panel.lua) says whether
-	-- the lobby may queue as a group from its size, so a join or leave
-	-- rebuilds the view as a metadata change does.
+	-- The Party lobby's Find Game (ui/lobby/controls.lua) and group panel
+	-- follow the lobby's size, so a join or leave rebuilds the view as a
+	-- metadata change does.
 	local function refresh_private_view()
 		if not SPDRN.is_matchmaking() then
 			MPAPI.refresh_current_view()
@@ -59,6 +62,12 @@ SPDRN.setup_lobby_events = function(lobby)
 			and not (inst._forfeited and inst._forfeited[player_id]) then
 			MPAPI._handle_gamemode_result(inst, inst:on_player_forfeit(player_id))
 		end
+		-- The report waits for every seated player's result. A player who drops after
+		-- the others finished (a crash: seated until its grace runs out) never sends
+		-- one, so try the report again now that it counts as gone.
+		if SPDRN._match_result_pending then
+			SPDRN._maybe_report_result(SPDRN._current_winner_id)
+		end
 		update_game_buttons()
 	end)
 
@@ -76,11 +85,22 @@ SPDRN.setup_lobby_events = function(lobby)
 			SPDRN.Sender.forget_host(lobby)
 		end
 		refresh_private_view()
+		-- Send our location again: the player who came back lost every peer location.
+		if player_id ~= lobby.player_id then
+			SPDRN.rebroadcast_location()
+		end
 		-- §16.5: votes reset on a reconnect too, same as a leave -- a stale
 		-- unanimous vote from before the drop shouldn't fire again the instant
 		-- the reconnecting player's own client re-syncs.
 		L.seed_votes:reset()
 		L.draw_votes:reset()
+	end)
+
+	-- A rejoined player is ready to receive once its catch-up ends: send our location again.
+	lobby:on(MPAPI.LobbyEvent.PLAYER_CATCHING_UP, function(player_id, catching_up)
+		if not catching_up and player_id ~= lobby.player_id then
+			SPDRN.rebroadcast_location()
+		end
 	end)
 
 	lobby:on('connected', function()

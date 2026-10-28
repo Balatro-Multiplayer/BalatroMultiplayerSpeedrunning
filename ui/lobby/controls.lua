@@ -74,9 +74,17 @@ local function mode_panel()
 	return { deck_panel() }
 end
 
+-- The Draft status element (see build_mm_status below).
+local _mm_status_el = nil
+
 -- Private lobbies: host gets START + LOBBY OPTIONS, guests get a READY toggle; both get the
 -- mode-specific panel(s)/code panel and LEAVE.
 local function build_private_controls()
+	-- This view does not hold the Draft status element. Drop the one an earlier lobby
+	-- built, so the next refresh_mm_status rebuilds the view (and mounts a new one)
+	-- instead of updating an element that is no longer on screen: the server-run
+	-- Draft changes no lobby metadata, so no other rebuild comes.
+	_mm_status_el = nil
 	local b = SPDRN.lobby.buttons
 	local lobby = SPDRN.lobby.ref
 	local row_nodes = {}
@@ -92,13 +100,34 @@ local function build_private_controls()
 	row_nodes[#row_nodes + 1] = code_panel()
 	row_nodes[#row_nodes + 1] = b.leave.node
 
+	return {
+		n = G.UIT.C,
+		config = { align = 'cm', padding = 0.1, r = 0.1, emboss = 0.1, colour = G.C.L_BLACK, mid = true },
+		nodes = { { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = row_nodes } },
+	}
+end
+
+-- A Party lobby (MPAPI.Party) has no lobby options and no deck: the host has Find Game,
+-- every other player a Ready toggle. While the party queues, the group panel
+-- (ui/lobby/group_panel.lua) says where it is.
+local function build_party_controls()
+	_mm_status_el = nil
+	local b = SPDRN.lobby.buttons
+	local lobby = SPDRN.lobby.ref
+	local row_nodes = {}
+	if lobby.is_host then
+		row_nodes[#row_nodes + 1] = b.party_find_game.node
+	else
+		row_nodes[#row_nodes + 1] = b.ready.node
+	end
+	row_nodes[#row_nodes + 1] = code_panel()
+	row_nodes[#row_nodes + 1] = b.leave.node
+
 	local rows = { { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = row_nodes } }
-	-- Queue the whole lobby for a casual match (ui/lobby/group_panel.lua).
-	local group_panel = SPDRN.lobby.build_group_panel and SPDRN.lobby.build_group_panel()
+	local group_panel = SPDRN.lobby.build_group_panel(lobby)
 	if group_panel then
 		rows[#rows + 1] = { n = G.UIT.R, config = { align = 'cm', padding = 0.05 }, nodes = { group_panel } }
 	end
-
 	return {
 		n = G.UIT.C,
 		config = { align = 'cm', padding = 0.1, r = 0.1, emboss = 0.1, colour = G.C.L_BLACK, mid = true },
@@ -106,11 +135,23 @@ local function build_private_controls()
 	}
 end
 
+-- A joiner before the host's metadata arrives: only what every lobby kind has.
+local function build_pending_controls()
+	_mm_status_el = nil
+	local b = SPDRN.lobby.buttons
+	return {
+		n = G.UIT.C,
+		config = { align = 'cm', padding = 0.1, r = 0.1, emboss = 0.1, colour = G.C.L_BLACK, mid = true },
+		nodes = { { n = G.UIT.R, config = { align = 'cm', padding = 0.1 }, nodes = {
+			code_panel(),
+			b.leave.node,
+		} } },
+	}
+end
+
 -- Reactive status panel: the deck-ban draft while one is active, otherwise the waiting line.
 -- Held as a single ui_element so the draft refreshes in place (:update swaps children by id)
 -- instead of rebuilding the lobby view on every ban. SPDRN.lobby.refresh_mm_status drives it.
-local _mm_status_el = nil
-
 local function build_mm_status()
 	if MPAPI.BanPick.is_active() then
 		return { nodes = MPAPI.BanPick.build_contents() }
@@ -134,7 +175,11 @@ local function build_matchmaking_controls()
 end
 
 function SPDRN.lobby.refresh_mm_status()
-	if _mm_status_el then
+	if _mm_status_el and not MPAPI.BanPick.is_active() and not SPDRN.is_matchmaking() then
+		-- A private lobby's Draft ended with no run (the game ended first): rebuild the
+		-- view, so the private controls come back in place of the Draft.
+		MPAPI.refresh_current_view()
+	elseif _mm_status_el then
 		_mm_status_el:update()
 	elseif MPAPI.BanPick.is_active() then
 		-- A private lobby's initial view is build_private_controls(), which has no
@@ -162,6 +207,13 @@ function SPDRN.lobby.build_controls()
 	-- actual run, so there's no "fall back to private controls mid-draft" case to handle.
 	if SPDRN.is_matchmaking() or MPAPI.BanPick.is_active() then
 		return build_matchmaking_controls()
+	end
+	local lobby = SPDRN.lobby.ref
+	if not MPAPI.Party.kind_known(lobby) then
+		return build_pending_controls()
+	end
+	if MPAPI.Party.is_party_lobby(lobby) then
+		return build_party_controls()
 	end
 	return build_private_controls()
 end

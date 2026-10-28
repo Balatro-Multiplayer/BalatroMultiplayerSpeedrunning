@@ -155,6 +155,22 @@ MPAPI.GameMode({
 	end,
 })
 
+-- Moves a Seed Scout match from the scouting phase to the real race.
+local function begin_race(instance)
+	-- Setting _phase = 'race' here (synchronously, before the actual restart happens) is itself
+	-- the re-entry guard: the very next poll sees _phase ~= 'scout' and returns immediately.
+	instance._phase = 'race'
+	-- The OFFICIAL displayed speedrun clock only counts the real race, not the scouting phase --
+	-- reset it exactly like a fresh begin_run would, then let request_run_transition (not
+	-- another queued Event -- see its own comment in ui/lobby/run_start.lua for why) perform
+	-- the actual restart on the next tick, outside this poll's own call stack.
+	SPDRN._run_started_at = love.timer.getTime()
+	if SPDRN.timer then
+		SPDRN.timer.start()
+	end
+	SPDRN.request_run_transition(instance, instance._scout_deck, instance._scout_seed)
+end
+
 -- Polled every frame from core.lua's Game:update hook. Advances a Seed Scout match from the
 -- scouting phase to the real race once SPDRN.SEED_SCOUT_DURATION has elapsed. Wall-clock driven
 -- (not ante/context driven, unlike every other gamemode hook) since there is no engine event
@@ -173,6 +189,11 @@ function SPDRN._check_seed_scout_timer()
 	if not instance or instance._phase ~= 'scout' or not instance._scout_started_at then
 		return
 	end
+	-- A playback (a replay, a rejoin catch-up) starts the race where the recording did: at the
+	-- race's run_info (replay_race_start below), not on this client's clock.
+	if SPDRN.is_replay_driving() then
+		return
+	end
 	-- Mirrors SPDRN.timer._tick's own "only once actually in the run" guard -- don't fire while
 	-- still mid blind-select/menu transition.
 	if not (G.GAME and G.STAGE == G.STAGES.RUN) then
@@ -182,18 +203,7 @@ function SPDRN._check_seed_scout_timer()
 		return
 	end
 
-	-- Setting _phase = 'race' here (synchronously, before the actual restart happens) is itself
-	-- the re-entry guard: the very next poll sees _phase ~= 'scout' and returns immediately.
-	instance._phase = 'race'
-	-- The OFFICIAL displayed speedrun clock only counts the real race, not the scouting phase --
-	-- reset it exactly like a fresh begin_run would, then let request_run_transition (not
-	-- another queued Event -- see its own comment in ui/lobby/run_start.lua for why) perform
-	-- the actual restart on the next tick, outside this poll's own call stack.
-	SPDRN._run_started_at = love.timer.getTime()
-	if SPDRN.timer then
-		SPDRN.timer.start()
-	end
-	SPDRN.request_run_transition(instance, instance._scout_deck, instance._scout_seed)
+	begin_race(instance)
 end
 
 -- Read by ui/timer/lifecycle.lua's timer._tick: while a Seed Scout match's
@@ -216,4 +226,94 @@ function SPDRN._seed_scout_remaining_seconds()
 	end
 	local elapsed = love.timer.getTime() - instance._scout_started_at
 	return math.max(0, SPDRN.SEED_SCOUT_DURATION - elapsed)
+end
+
+local function current_scout()
+	local lobby = MPAPI.get_current_lobby()
+	local meta = lobby and lobby:get_metadata()
+	if not (meta and meta.gamemode == SPDRN.Gamemode.SEED_SCOUT) then
+		return nil
+	end
+	return lobby:get_gamemode_instance()
+end
+
+-- The index in `events` of the run_info that began the race, or nil while the log is still in the
+-- scout. The first run_info is the scout's start. A scout death restarts the scout and records
+-- run_restarted (ui/lose_screen.lua) before the new run's run_info; the scout -> race step records
+-- no such marker. So the first later run_info with no marker since the one before is the race.
+-- Known limit: a scout death in the same frame as the scout's end reads as a scout restart.
+function SPDRN.seed_scout_race_start(events)
+	local seen_run_info, restarting = false, false
+	for i, ev in ipairs(events or {}) do
+		local opcode = ev.opcode
+		if opcode == MPAPI.OPCODE.RUN_RESTARTED or opcode == MPAPI.OPCODE.RUN_DIED then
+			restarting = true
+		elseif opcode == MPAPI.OPCODE.RUN_INFO then
+			if seen_run_info and not restarting then
+				return i
+			end
+			seen_run_info, restarting = true, false
+		end
+	end
+	return nil
+end
+
+-- A playback of a Seed Scout match (a replay, a crash rejoin's catch-up) starts the race at the
+-- race's recorded run_info, the same way the live timer did: the scout run is thrown away and the
+-- race restarts on the same deck and seed with regular money. Without this a catch-up stayed in
+-- the scout ($500, a fresh scout timer) and played the race's actions on the scout's run.
+local function replay_race_start(_args, ctx)
+	local driver = ctx.driver
+	if not (ctx.is_pov and driver) then
+		return
+	end
+	local instance = current_scout()
+	if not (instance and instance._phase == 'scout') then
+		return
+	end
+	if SPDRN.seed_scout_race_start(driver._timeline) ~= driver._cursor - 1 then
+		return
+	end
+	driver:pause()
+	-- Teardown first, so the wait below cannot see the scout run's own blind select.
+	SPDRN.teardown_existing_run()
+	begin_race(instance)
+	SPDRN._playback_wait_for(function()
+		return SPDRN._pending_run_transition == nil and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil
+	end, function()
+		driver:play()
+	end)
+end
+
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.RUN_INFO, replay_race_start)
+
+-- After a crash catch-up the Seed Scout clocks are the catch-up's own: a scout timer started at
+-- the catch-up, a race clock started when the catch-up replayed the race start. Put them on real
+-- time from the server's race start (the first event of the game, the scout's start), so the
+-- scout ends when it would have and the race clock counts the time away.
+-- `race_started_local` is that start on this client's clock, or nil (then the last recorded event
+-- stands for now, as in SPDRN.restore_race_clocks).
+function SPDRN.restore_seed_scout_clocks(instance, events, race_started_local)
+	if not (instance and instance._phase) then
+		return
+	end
+	local start = race_started_local
+	if not start then
+		local last_t = 0
+		for _, ev in ipairs(events or {}) do
+			if type(ev.t) == 'number' and ev.t > last_t then
+				last_t = ev.t
+			end
+		end
+		start = love.timer.getTime() - last_t / 1000
+	end
+	if instance._phase == 'scout' then
+		instance._scout_started_at = start
+		return
+	end
+	local race_index = SPDRN.seed_scout_race_start(events)
+	local race_t = race_index and events[race_index].t
+	if type(race_t) == 'number' then
+		SPDRN._run_started_at = start + race_t / 1000
+	end
 end

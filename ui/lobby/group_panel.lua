@@ -1,8 +1,8 @@
 SPDRN.lobby = SPDRN.lobby or { buttons = {} }
 
--- The private lobby's group queue panel (objects/matchmaking/group_queue.lua): the host
--- opens the casual Find Game pillars and queues the lobby as a group; while the
--- group is queueing every member sees where it is and may cancel.
+-- The Party lobby's queue panel (objects/matchmaking/group_queue.lua): while the party
+-- queues, every player sees where it is and may cancel. Nothing shows while it does not
+-- queue; the host's Find Game (ui/lobby/controls.lua) starts it.
 
 local function text_row(text, scale, colour)
 	return { n = G.UIT.R, config = { align = "cm", padding = 0.03 }, nodes = {
@@ -10,44 +10,36 @@ local function text_row(text, scale, colour)
 	} }
 end
 
-local function mode_display(key)
-	return SPDRN.group_mode_display and SPDRN.group_mode_display(key) or tostring(key)
-end
-
--- The panel's rows. Reads only.
+-- The panel's rows, or nil while the party does not queue. Reads only.
 function SPDRN.lobby.group_panel_rows(lobby)
 	local Group = MPAPI.matchmaking.group
-	local view = lobby and lobby.group_queue
-	if type(view) == "table" then
-		local rows = { text_row(localize("k_group_queue"), 0.36, G.C.UI.TEXT_INACTIVE) }
-		local line = Group.status_line(lobby)
-		rows[#rows + 1] = text_row((line and line.text or "") .. " " .. mode_display(view.mode), 0.36, G.C.GOLD)
-		if not lobby.is_host then
-			rows[#rows + 1] = text_row(localize("k_group_member_queued_by_host") .. " " .. mode_display(view.mode), 0.28)
-		end
-		if view.phase ~= Group.Phase.AWAY then
-			rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-				UIBox_button({ id = "spdrn_group_cancel", button = "spdrn_group_cancel", label = { localize("b_group_cancel") }, colour = G.C.RED, minw = 2.6, minh = 0.6, scale = 0.4 }),
-			} }
-		end
-		return rows
+	local view = lobby.group_queue
+	if not view then
+		return nil
 	end
-
-	-- One button that opens the casual Find Game pillars to pick a mode from;
-	-- only the host of a lobby of two or more may press it.
-	local can_open = lobby and lobby.is_host and #lobby:get_players() >= Group.MIN_SIZE
-	return { { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
-		UIBox_button({ id = "spdrn_group_queue", button = can_open and "spdrn_group_queue" or "nil", label = { localize("k_group_queue") }, colour = can_open and G.C.BLUE or G.C.UI.BACKGROUND_INACTIVE, minw = 3, minh = 0.8, scale = 0.45 }),
-	} } }
+	local mode = SPDRN.group_mode_display(view.mode)
+	local rows = { text_row(localize("k_party_lobby"), 0.36, G.C.UI.TEXT_INACTIVE) }
+	local line = Group.status_line(lobby)
+	rows[#rows + 1] = text_row((line and line.text or "") .. " " .. mode, 0.36, G.C.GOLD)
+	if not lobby.is_host then
+		rows[#rows + 1] = text_row(localize("k_group_member_queued_by_host") .. " " .. mode, 0.28)
+	end
+	if view.phase ~= Group.Phase.AWAY then
+		rows[#rows + 1] = { n = G.UIT.R, config = { align = "cm", padding = 0.05 }, nodes = {
+			UIBox_button({ id = "spdrn_group_cancel", button = "spdrn_group_cancel", label = { localize("b_group_cancel") }, colour = G.C.RED, minw = 2.6, minh = 0.6, scale = 0.4 }),
+		} }
+	end
+	return rows
 end
 
-function SPDRN.lobby.build_group_panel()
-	if not (MPAPI.matchmaking and MPAPI.matchmaking.group and MPAPI.matchmaking.group.status_line) then
+function SPDRN.lobby.build_group_panel(lobby)
+	local rows = SPDRN.lobby.group_panel_rows(lobby)
+	if not rows then
 		return nil
 	end
 	return {
 		n = G.UIT.C,
 		config = { align = "cm", padding = 0.08, r = 0.1, colour = G.C.BLACK, minw = 6 },
-		nodes = SPDRN.lobby.group_panel_rows(SPDRN.lobby.ref),
+		nodes = rows,
 	}
 end

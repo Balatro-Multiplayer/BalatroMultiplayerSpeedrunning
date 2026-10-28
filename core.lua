@@ -130,7 +130,7 @@ MPAPI.on_loaded(function()
 		colour = G.C.GREEN,
 		prevent_pause = true,
 		options_builder = SPDRN.create_run_options,
-		title = { base = 'spdrn_speedrun_title_base', extra = 'spdrn_speedrun_title_extra' },
+		title = 'spdrn_speedrun_title',
 		main_menu_ui = 'spdrn_main_menu',
 		lobby_ui = 'spdrn_lobby',
 	})

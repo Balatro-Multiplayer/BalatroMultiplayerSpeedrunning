@@ -87,13 +87,13 @@ local function highlight_resolved_hand_indices(indices, refs, ctx, opcode)
 	end
 end
 
-MPAPI.playback.register_handler('spdrn', 'manifest', function(_args, _ctx) end)
-MPAPI.playback.register_handler('spdrn', 'end', function(_args, _ctx) end)
-MPAPI.playback.register_handler('spdrn', 'chk', function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.MANIFEST, function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.END, function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.CHK, function(_args, _ctx) end)
 -- Pure bookkeeping (see record.lua's ease_dollars hook) -- the real dollar
 -- change already happens as a side effect of whatever action caused it
 -- (buy/sell/etc, each already replayed by its own handler), nothing to apply.
-MPAPI.playback.register_handler('spdrn', 'money_delta', function(_args, _ctx) end)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.MONEY_DELTA, function(_args, _ctx) end)
 
 -- Same real-UIBox technique PvP's equivalent handler needed (confirmed live
 -- there, a crash risk from calling select_blind before G.blind_select's own
@@ -103,22 +103,6 @@ MPAPI.playback.register_handler('spdrn', 'money_delta', function(_args, _ctx) en
 local function do_select_blind()
 	local blind_key = G.GAME.round_resets.blind_choices[G.GAME.blind_on_deck]
 	G.FUNCS.select_blind({ config = { ref_table = G.P_BLINDS[blind_key] }, UIBox = G.blind_select })
-end
-
--- Leaving the shop (the "Next Round" button, G.FUNCS.toggle_shop) has no RLOG_CODE
--- of its own anywhere in this codebase -- it was simply never recorded. A recorded
--- select_blind/skip_blind opcode can only exist because the real player already
--- left the shop to reach that screen, so synthesizing the click here (once, only
--- when actually still in the shop) is safe and correct for every recording,
--- including every one already stored server-side before this fix existed --
--- unlike a fix on the recording side, this doesn't need new data to take effect.
--- Confirmed live: without this, select_blind's own wait_for (below) waits forever
--- once the driver correctly stops advancing during it (see that fix's own
--- comment) -- replay would hang at the shop on every single round transition.
-local function leave_shop_if_needed()
-	if G.STATE == G.STATES.SHOP then
-		G.FUNCS.toggle_shop({ config = {} })
-	end
 end
 
 -- Defensive readiness gate for any opcode that touches the shop's own card
@@ -146,31 +130,8 @@ end
 -- Booster Pack needs a FURTHER wait afterward, for the pack it opens -- see
 -- replay_buy below) -- anything else (including no return at all) resumes
 -- immediately once fn() returns, same as before.
-local SHOP_READY_TIMEOUT_SECONDS = 10
 local function with_shop_ready(ctx, fn)
-	if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-		if not fn() and ctx.driver then ctx.driver:play() end
-		return
-	end
-	local driver = ctx.driver
-	if driver then driver:pause() end
-	local deadline = love.timer.getTime() + SHOP_READY_TIMEOUT_SECONDS
-	SPDRN._playback_wait_for(function()
-		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-			return true
-		end
-		if love.timer.getTime() >= deadline then
-			MPAPI.sendWarnMessage('[replay] shop never became ready after ' .. SHOP_READY_TIMEOUT_SECONDS .. 's -- giving up on this action and resuming')
-			return true
-		end
-		return false
-	end, function()
-		local deferred = false
-		if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then
-			deferred = fn()
-		end
-		if not deferred and driver then driver:play() end
-	end)
+	MPAPI.playback.with_shop_ready(ctx, fn, SPDRN._playback_wait_for)
 end
 
 -- SPDRN._playback_wait_for is its own independent poll (Game:update, see
@@ -321,7 +282,7 @@ end
 -- real-time timeout instead of waiting indefinitely.
 local BLIND_SELECT_SCREEN_TIMEOUT_SECONDS = 10
 local function wait_for_blind_select_screen(driver, on_ready)
-	leave_shop_if_needed()
+	MPAPI.playback.leave_shop_if_needed()
 	local deadline = love.timer.getTime() + BLIND_SELECT_SCREEN_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
 		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0 then
@@ -341,7 +302,7 @@ local function wait_for_blind_select_screen(driver, on_ready)
 	end)
 end
 
-MPAPI.playback.register_handler('spdrn', 'select_blind', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.SELECT_BLIND, function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
@@ -353,14 +314,14 @@ MPAPI.playback.register_handler('spdrn', 'select_blind', function(_args, ctx)
 	end)
 end)
 
-MPAPI.playback.register_handler('spdrn', 'skip_blind', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.SKIP_BLIND, function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
 	wait_for_blind_select_screen(driver, function()
 		local blind_before = G.GAME.blind_on_deck
 		local function do_skip_blind()
-			G.FUNCS.skip_blind({ UIBox = G.blind_select })
+			G.FUNCS.skip_blind({ UIBox = MPAPI.playback.current_blind_panel() })
 		end
 		do_skip_blind()
 		wait_for_skip_applied(driver, do_skip_blind, function()
@@ -381,11 +342,11 @@ end)
 -- per-card skip-and-warn behavior in highlight_resolved_hand_indices -- only
 -- the all-failed case needs its own guard here, since vanilla can't handle a
 -- literally empty selection.
-MPAPI.playback.register_handler('spdrn', 'play', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PLAY, function(args, ctx)
 	if not ctx.is_pov then return end
 	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
-	highlight_resolved_hand_indices(indices, refs, ctx, 'play')
+	highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.PLAY)
 	-- G.hand can be nil here too (highlight_resolved_hand_indices already
 	-- warned and no-opped in that case, above) -- checked via G.hand's own
 	-- presence rather than assuming it survived that call, not just #==0.
@@ -399,11 +360,11 @@ MPAPI.playback.register_handler('spdrn', 'play', function(args, ctx)
 	G.FUNCS.play_cards_from_highlighted()
 end)
 
-MPAPI.playback.register_handler('spdrn', 'discard', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.DISCARD, function(args, ctx)
 	if not ctx.is_pov then return end
 	local indices, refs = args and args[1], args and args[2]
 	if not indices then return end
-	highlight_resolved_hand_indices(indices, refs, ctx, 'discard')
+	highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.DISCARD)
 	local highlighted = G.hand and G.hand.highlighted
 	if not highlighted or #highlighted == 0 then
 		if G.hand then
@@ -449,10 +410,10 @@ local function resolve_own_card(ctx, ref, area, idx, opcode)
 	return card
 end
 
-MPAPI.playback.register_handler('spdrn', 'sell', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.SELL, function(args, ctx)
 	if not ctx.is_pov then return end
 	local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
-	local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'sell')
+	local card = resolve_own_card(ctx, ref, area_object(area_id), idx, MPAPI.OPCODE.SELL)
 	if card then
 		card:sell_card()
 		SMODS.calculate_context({ selling_card = true, card = card })
@@ -503,10 +464,10 @@ local function replay_buy(args, ctx)
 	local driver = ctx.driver
 	with_shop_ready(ctx, function()
 		local area_id, idx, ref = args and args[1], args and args[2], args and args[3]
-		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, 'buy')
+		local card = resolve_own_card(ctx, ref, area_object(area_id), idx, MPAPI.OPCODE.BUY)
 		if not card then return false end
 		local is_booster = card.ability and card.ability.set == 'Booster'
-		G.FUNCS.buy_from_shop({ config = { id = is_booster and 'buy_and_use' or nil, ref_table = card } })
+		G.FUNCS.buy_from_shop({ config = { id = MPAPI.playback.buy_button_id(card, args), ref_table = card } })
 		if not is_booster then return false end
 		if driver then driver:pause() end
 		SPDRN._playback_wait_for(function()
@@ -517,29 +478,29 @@ local function replay_buy(args, ctx)
 		return true
 	end)
 end
-MPAPI.playback.register_handler('spdrn', 'buy', replay_buy)
-MPAPI.playback.register_handler('spdrn', 'open_pack', replay_buy)
-MPAPI.playback.register_handler('spdrn', 'voucher', replay_buy)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.BUY, replay_buy)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.OPEN_PACK, replay_buy)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.VOUCHER, replay_buy)
 
-MPAPI.playback.register_handler('spdrn', 'use', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.USE, function(args, ctx)
 	if not ctx.is_pov then return end
 	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
-	local card = resolve_own_card(ctx, ref, G.consumeables, idx, 'use')
+	local card = resolve_own_card(ctx, ref, G.consumeables, idx, MPAPI.OPCODE.USE)
 	if not card then return end
-	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'use') end
+	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, MPAPI.OPCODE.USE) end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 
-MPAPI.playback.register_handler('spdrn', 'pack_pick', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PACK_PICK, function(args, ctx)
 	if not ctx.is_pov then return end
 	local idx, targets, ref, target_refs = args and args[1], args and args[2], args and args[3], args and args[4]
-	local card = resolve_own_card(ctx, ref, G.pack_cards, idx, 'pack_pick')
+	local card = resolve_own_card(ctx, ref, G.pack_cards, idx, MPAPI.OPCODE.PACK_PICK)
 	if not card then return end
-	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, 'pack_pick') end
+	if targets then highlight_resolved_hand_indices(targets, target_refs, ctx, MPAPI.OPCODE.PACK_PICK) end
 	G.FUNCS.use_card({ config = { ref_table = card } })
 end)
 
-MPAPI.playback.register_handler('spdrn', 'pack_skip', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PACK_SKIP, function(_args, ctx)
 	if ctx.is_pov then G.FUNCS.skip_booster({ config = {} }) end
 end)
 
@@ -549,7 +510,7 @@ end)
 -- ("attempt to get length of field 'cards' (a nil value)",
 -- functions/button_callbacks.lua, inside reroll_shop's own deferred
 -- G.E_MANAGER event, per the lovely game-dump).
-MPAPI.playback.register_handler('spdrn', 'reroll', function(_args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.REROLL, function(_args, ctx)
 	if not ctx.is_pov then return end
 	with_shop_ready(ctx, function()
 		G.FUNCS.reroll_shop({ config = {} })
@@ -598,7 +559,7 @@ end)
 -- beyond #perm from area.cards (new_cards below is only ever built out to
 -- #perm), the same data loss as the too-short case, just silent instead of
 -- an obvious nil-splice.
-MPAPI.playback.register_handler('spdrn', 'reorder', function(args, ctx)
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.REORDER, function(args, ctx)
 	if not ctx.is_pov then return end
 	local area_id, perm, moved = args and args[1], args and args[2], args and args[3]
 	local area = area_object(area_id)
@@ -671,11 +632,47 @@ end)
 -- real-time timeout rather than risk hanging forever on an edge case not yet
 -- seen live.
 local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
-MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
+
+-- The Cash Out button is its own UIBox, built some time after the round_eval screen. Calling
+-- cash_out before it exists removes G.round_eval first, and the button is then built with no
+-- major to follow: it leaks off screen.
+local function find_cash_out_button()
+	for _, box in pairs(G.I.UIBOX) do
+		local found
+		local function walk(node)
+			if found or not node then return end
+			if node.config and node.config.button == 'cash_out' then found = node return end
+			for _, child in ipairs(node.children or {}) do walk(child) end
+		end
+		walk(box.UIRoot)
+		if found then return found end
+	end
+end
+
+-- True when the Cash Out wait can end: the button exists, the round was already cashed out
+-- (no round_eval and the state is past ROUND_EVAL), or time ran out. The same "no
+-- round_eval" holds before the round is evaluated, so those states keep waiting.
+function SPDRN._cashout_wait_over(button_exists, round_eval_built, state, timed_out)
+	if button_exists or timed_out then return true end
+	local S = G.STATES
+	local before_round_eval = state == S.SELECTING_HAND or state == S.HAND_PLAYED or state == S.DRAW_TO_HAND or state == S.NEW_ROUND
+	return not round_eval_built and state ~= S.ROUND_EVAL and not before_round_eval
+end
+
+MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.CASHOUT, function(_args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
 	if driver then driver:pause() end
-	G.FUNCS.cash_out({ config = {} })
+	local button_deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
+	SPDRN._playback_wait_for(function()
+		return SPDRN._cashout_wait_over(find_cash_out_button() ~= nil, G.round_eval ~= nil, G.STATE, love.timer.getTime() >= button_deadline)
+	end, function()
+		G.FUNCS.cash_out(find_cash_out_button() or { config = {} })
+		SPDRN._await_cashout_transition(driver)
+	end)
+end)
+
+function SPDRN._await_cashout_transition(driver)
 	local deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
 		if G.STATE == G.STATES.ROUND_EVAL then
@@ -697,4 +694,4 @@ MPAPI.playback.register_handler('spdrn', 'cashout', function(_args, ctx)
 	end, function()
 		if driver then driver:play() end
 	end)
-end)
+end

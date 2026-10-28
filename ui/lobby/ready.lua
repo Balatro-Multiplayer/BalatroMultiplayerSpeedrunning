@@ -60,6 +60,9 @@ function SPDRN.reset_ready_state()
 	if b.start_game then
 		b.start_game:update()
 	end
+	if b.party_find_game then
+		b.party_find_game:update()
+	end
 end
 
 -- Host-only: record a player's ready state and react (refresh START for private lobbies, or
@@ -73,8 +76,14 @@ function SPDRN.set_player_ready(player_id, ready)
 	if SPDRN.is_matchmaking() then
 		SPDRN.refresh_matchmaking_status()
 		SPDRN.maybe_autostart()
-	elseif SPDRN.lobby.buttons.start_game then
-		SPDRN.lobby.buttons.start_game:update()
+	else
+		local b = SPDRN.lobby.buttons
+		if b.start_game then
+			b.start_game:update()
+		end
+		if b.party_find_game then
+			b.party_find_game:update()
+		end
 	end
 end
 
