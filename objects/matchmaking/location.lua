@@ -80,6 +80,14 @@ function SPDRN._check_location_broadcast()
 	lobby:action(MPAPI.ActionTypes['spdrn_location']):broadcast(loc)
 end
 
+-- A client that rejoined has an empty SPDRN._locations, and a broadcast only happens when a
+-- location changes. Forgetting the last broadcast makes the next frame send it again. Each
+-- client calls this when another player comes back (and after its own rejoin resumes), so a
+-- rejoined peer sees every racer's real run/ante/round without waiting for the next change.
+function SPDRN.rebroadcast_location()
+	SPDRN._last_broadcast_location = nil
+end
+
 -- Is `loc` further along than `other` (nil `other` always loses)? Run takes
 -- priority over ante/round for the multi-run reason explained above `current_run`;
 -- `run` defaults to 1 for locations broadcast before this field existed.

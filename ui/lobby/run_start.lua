@@ -218,7 +218,7 @@ function SPDRN.begin_run(gamemode_key, decks, seed)
 	local meta = lobby:get_metadata() or {}
 	instance._meta_challenge = meta.challenge
 	instance._meta_stake = tonumber(meta.stake)
-	lobby._gamemode_instance = instance
+	lobby:set_gamemode_instance(instance)
 	safe_start_run(instance, deck_list[1], seed)
 end
 

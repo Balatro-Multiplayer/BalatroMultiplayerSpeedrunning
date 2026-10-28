@@ -36,15 +36,15 @@ function SPDRN._find_bootstrap(timeline, player_id)
 	local found = {}
 	for _, entry in ipairs(timeline) do
 		if entry.player_id == player_id then
-			if not found.match_manifest and entry.opcode == 'match_manifest' then
+			if not found.match_manifest and entry.opcode == MPAPI.OPCODE.MATCH_MANIFEST then
 				found.match_manifest = true
 				bootstrap.schema_version = entry.args.schema_version
 				bootstrap.start_epoch_ms = entry.args.start_epoch_ms
-			elseif not found.lobby_info and entry.opcode == 'lobby_info' then
+			elseif not found.lobby_info and entry.opcode == MPAPI.OPCODE.LOBBY_INFO then
 				found.lobby_info = true
 				bootstrap.gamemode = entry.args.gamemode
 				bootstrap.ruleset = entry.args.ruleset
-			elseif not found.run_info and entry.opcode == 'run_info' then
+			elseif not found.run_info and entry.opcode == MPAPI.OPCODE.RUN_INFO then
 				found.run_info = true
 				bootstrap.seed = entry.args.seed
 				bootstrap.deck = entry.args.deck

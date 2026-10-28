@@ -38,7 +38,7 @@ local function noop_replay(self, _args, ctx)
 end
 
 MPAPI.RLOG_CODE {
-	key = 'run_complete',
+	key = MPAPI.OPCODE.RUN_COMPLETE,
 	mods = { 'spdrn' },
 	write = function(self)
 		self:record(nil, "action:runComplete")
@@ -47,7 +47,7 @@ MPAPI.RLOG_CODE {
 }
 
 MPAPI.RLOG_CODE {
-	key = 'run_died',
+	key = MPAPI.OPCODE.RUN_DIED,
 	mods = { 'spdrn' },
 	write = function(self)
 		self:record(nil, "action:runDied")
@@ -60,7 +60,7 @@ MPAPI.RLOG_CODE {
 }
 
 MPAPI.RLOG_CODE {
-	key = 'run_restarted',
+	key = MPAPI.OPCODE.RUN_RESTARTED,
 	mods = { 'spdrn' },
 	write = function(self)
 		self:record(nil, "action:runRestarted")

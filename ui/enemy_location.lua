@@ -25,6 +25,15 @@ local function loc_text(loc)
 	return 'Run ' .. tostring(loc.run or 1) .. ', Ante ' .. tostring(loc.ante)
 end
 
+-- The badge for a racer who rejoined after a crash and is replaying their run (MPAPI tells
+-- everyone; nothing waits for them).
+local function with_badge(text, lobby, player_id)
+	if lobby and player_id and lobby:is_player_catching_up(player_id) then
+		return text .. ' (' .. localize('k_catching_up') .. ')'
+	end
+	return text
+end
+
 local function value_nodes(chip_ui_id)
 	return {
 		{ n = G.UIT.O, config = { id = chip_ui_id, object = DynaText({
@@ -49,7 +58,7 @@ local function popup_rows()
 					{ { n = G.UIT.R, config = { align = 'cm' }, nodes = {
 						{ n = G.UIT.T, config = { text = p.displayName or p.id, scale = 0.4, colour = G.C.UI.TEXT_LIGHT, shadow = true } },
 					} } },
-					{ { n = G.UIT.T, config = { text = loc_text(SPDRN._locations[p.id]), scale = 0.32, colour = G.C.WHITE, shadow = true } } },
+					{ { n = G.UIT.T, config = { text = with_badge(loc_text(SPDRN._locations[p.id]), lobby, p.id), scale = 0.32, colour = G.C.WHITE, shadow = true } } },
 					2.2
 				)
 			end
@@ -96,7 +105,7 @@ function hud._tick()
 	end
 
 	local best_id, best_loc = SPDRN.furthest_opponent_location()
-	hud.text = best_id and loc_text(best_loc) or 'Waiting for opponents...'
+	hud.text = best_id and with_badge(loc_text(best_loc), MPAPI.get_current_lobby(), best_id) or 'Waiting for opponents...'
 
 	if not hud._shown then
 		pcall(hud._ctrl.show)
