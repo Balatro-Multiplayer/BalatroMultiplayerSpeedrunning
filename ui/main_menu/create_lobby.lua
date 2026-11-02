@@ -5,6 +5,15 @@ G.FUNCS.spdrn_create_lobby = function()
 end
 
 local function create_lobby_with_gamemode(key)
+	-- Block creating a lobby while in matchmaking. The replay re-enters THIS
+	-- function (not MPAPI.create_lobby) so "Leave Queue & Continue" runs the full
+	-- setup -- setup_lobby_events + the connected handler below. Replaying the API
+	-- primitive would allocate the lobby server-side but leave the client stranded
+	-- on the menu.
+	if MPAPI.matchmaking.guard_queued(function() return create_lobby_with_gamemode(key) end) then
+		return
+	end
+
 	_pending_gamemode_key = key
 	SPDRN._lobby_kind = SPDRN.LobbyKind.PRIVATE
 	G.FUNCS.exit_overlay_menu()

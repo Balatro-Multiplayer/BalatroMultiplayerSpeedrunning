@@ -67,6 +67,14 @@ G.FUNCS.spdrn_join_lobby_from_clipboard = function()
 end
 
 SPDRN._join_lobby_with_code = function(code)
+	-- Block joining while in matchmaking. The replay re-enters THIS function (not
+	-- MPAPI.join_lobby) so "Leave Queue & Continue" runs the full setup --
+	-- setup_lobby_events. Replaying the API primitive would join server-side (the
+	-- host sees you) but leave your client stranded on the menu.
+	if MPAPI.matchmaking.guard_queued(function() return SPDRN._join_lobby_with_code(code) end) then
+		return
+	end
+
 	SPDRN._lobby_kind = SPDRN.LobbyKind.PRIVATE
 	local lobby = MPAPI.join_lobby(SPDRN.id, code)
 	if not lobby then
