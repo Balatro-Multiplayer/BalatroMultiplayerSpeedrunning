@@ -426,39 +426,15 @@ end)
 -- populated shop area would silently pick the wrong (or no) card, same class
 -- of hazard as the hand-card resolution fix elsewhere in this file, just for
 -- the shop instead of the hand.
--- Confirmed live: vanilla's own G.FUNCS.buy_from_shop calls
--- G.FUNCS.check_for_buy_space(c1) unless e.config.id == 'buy_and_use' --
--- and that check ONLY recognizes Voucher/Enhanced/Default/Joker/consumeable
--- cards as things it knows how to validate space for. A Booster Pack is none
--- of those (card.ability.set == 'Booster', card.ability.consumeable is nil),
--- so the check unconditionally fails and buy_from_shop silently returns
--- false -- no error, nothing added anywhere -- UNLESS the buy_and_use id is
--- set, which is how the real "BUY" button on a pack card is actually wired
--- (functions/UI_definitions.lua). The recorded `open_pack` opcode never
--- captured this id (it wasn't part of the RLOG_CODE's write shape at all,
--- and doesn't need to be -- every open_pack IS a Booster Pack purchase by
--- construction, since that's the opcode key generic_codes.lua's own
--- buy_from_shop hook chooses specifically because the card's set is
--- 'Booster'). Every replayed open_pack was therefore silently failing to
--- buy anything, permanently starving that player's consumeables/pack
--- pipeline for the rest of the match -- traced live to a real production
--- match's replay expecting a Booster Pack that no recorded action appeared
--- to ever add.
--- buy_and_use's own vanilla implementation opens the pack via a further
--- G.E_MANAGER-deferred chain (functions/button_callbacks.lua's buy_from_shop,
--- id == 'buy_and_use' branch calls G.FUNCS.use_card internally, itself async)
--- -- NOT synchronously within this call. Without waiting for it, the driver
--- resuming immediately can dispatch the recorded pack_pick that's supposed to
--- choose from this exact pack before G.pack_cards is actually populated,
--- same "driver races ahead of an async vanilla operation" hazard as
--- with_shop_ready itself, select_blind's hand-dealt wait, etc. elsewhere in
--- this file. Confirmed live. (The original recording also has a separate,
--- now-redundant `use` opcode for this same purchase -- vanilla's buy_and_use
--- internally calling use_card gets caught by the SAME hook that records a
--- normal manual "use" -- which is harmless on replay: by the time it
--- dispatches the card's already fully consumed by this buy, so it correctly
--- no-ops via resolve_own_card's own desync warning rather than doing
--- anything wrong.)
+-- MPAPI's buy_from_shop hook hands a Booster Pack to use_card, so only
+-- Card:open charges the pack. Older logs recorded the open as `use` with a
+-- Booster ref; MPAPI.playback.dispatch rewrites those into open_pack.
+-- Opening a pack runs through G.E_MANAGER-deferred steps, so it does not finish
+-- within this call. Without waiting for it, the driver resuming immediately can
+-- dispatch the recorded pack_pick that is supposed to choose from this exact
+-- pack before G.pack_cards is populated, the same "driver races ahead of an
+-- async vanilla operation" hazard as with_shop_ready itself, select_blind's
+-- hand-dealt wait, etc. elsewhere in this file. Confirmed live.
 local function replay_buy(args, ctx)
 	if not ctx.is_pov then return end
 	local driver = ctx.driver
