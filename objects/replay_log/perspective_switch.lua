@@ -58,7 +58,7 @@ local function closest_event_index(timeline, target_player_id, target_bootstrap,
 	if not best_idx then
 		return 1, nil
 	end
-	MPAPI.sendDebugMessage('[perspective_switch] landed ' .. tostring(best_delta) .. 'ms from the requested moment for player ' .. tostring(target_player_id))
+	SPDRN.sendDebugMessage('[perspective_switch] landed ' .. tostring(best_delta) .. 'ms from the requested moment for player ' .. tostring(target_player_id))
 	return best_idx + 1, best_delta
 end
 

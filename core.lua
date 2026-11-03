@@ -1,7 +1,7 @@
 SPDRN = SMODS.current_mod
 
 function SPDRN.sendDebugMessage(msg)
-	sendDebugMessage(msg, SPDRN.id)
+	MPAPI.match_log('debug', msg, SPDRN.id)
 end
 
 function SPDRN.sendWarnMessage(msg)
