@@ -86,15 +86,17 @@ MPAPI.run_save.register_state(SPDRN.id, {
 	end,
 })
 
--- The first Blind Select of a run takes its Run save before the poll that writes the run's
--- run_info has run (the screen's UI is not built yet when the save is taken). That save would sit before the run_info, and a rejoin refuses a save with a
--- run_info after it. Write the run_info first, so the save belongs to the run it was taken in.
+-- The first Blind Select of a run takes its Run save before the polls in Game:update that finish
+-- the run's start have run: the run_info is written and Seed Scout's scouting budget is set. A save
+-- ahead of the run_info is read by a rejoin as the run before's, and one ahead of the budget
+-- would come back without it. Do both first, so the save holds the run as it is a frame later.
 if MPAPI.run_save.take and not MPAPI.run_save._spdrn_take_wrapped then
 	MPAPI.run_save._spdrn_take_wrapped = true
 	local take = MPAPI.run_save.take
 	MPAPI.run_save.take = function(...)
 		if SPDRN.is_active() and G.GAME and G.STATE == G.STATES.BLIND_SELECT then
 			pcall(SPDRN._write_pending_run_info)
+			pcall(SPDRN._check_pending_dollars_override)
 		end
 		return take(...)
 	end

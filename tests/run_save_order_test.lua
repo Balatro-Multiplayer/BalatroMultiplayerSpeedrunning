@@ -1,7 +1,6 @@
 -- Run from the repo root: luajit tests/run_save_order_test.lua
--- A run's run_info is written from a Game:update poll, after the Blind Select screen is built. The
--- Run save of that first Blind Select is queued behind the build, so it was taken before the
--- run_info and the rejoin read it as a save from the run before.
+-- The run_info and the Seed Scout budget are set from Game:update polls, after the first Blind Select
+-- of a run is built. The Run save of that screen must follow both.
 local calls = {}
 SPDRN = { id = 'MultiplayerSPDRN' }
 function SPDRN.is_active()
@@ -11,6 +10,9 @@ function SPDRN._write_pending_run_info()
 	calls[#calls + 1] = 'run_info'
 end
 G = { GAME = {}, STATE = 1, STATES = { BLIND_SELECT = 1 } }
+function SPDRN._check_pending_dollars_override()
+	calls[#calls + 1] = 'budget'
+end
 MPAPI = {
 	get_current_lobby = function() end,
 	run_save = {
@@ -23,5 +25,5 @@ MPAPI = {
 }
 dofile('objects/replay_log/run_save.lua')
 assert(MPAPI.run_save.take() == true, 'the save is still taken')
-assert(table.concat(calls, ',') == 'run_info,take', 'run_info is written before the save is taken, got ' .. table.concat(calls, ','))
+assert(table.concat(calls, ',') == 'run_info,budget,take', 'the run start is finished before the save is taken, got ' .. table.concat(calls, ','))
 print('run_save_order_test: ok')
