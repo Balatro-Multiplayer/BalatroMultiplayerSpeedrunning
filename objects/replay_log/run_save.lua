@@ -67,3 +67,17 @@ MPAPI.run_save.register_state(SPDRN.id, {
 		end
 	end,
 })
+
+-- The first Blind Select of a run takes its Run save before the poll that writes the run's
+-- run_info has run. That save would sit before the run_info, and a rejoin refuses a save with a
+-- run_info after it. Write the run_info first, so the save belongs to the run it was taken in.
+if MPAPI.run_save.take and not MPAPI.run_save._spdrn_take_wrapped then
+	MPAPI.run_save._spdrn_take_wrapped = true
+	local take = MPAPI.run_save.take
+	MPAPI.run_save.take = function(...)
+		if SPDRN.is_active() then
+			pcall(SPDRN._check_pending_run_info)
+		end
+		return take(...)
+	end
+end
