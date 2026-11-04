@@ -55,9 +55,15 @@ end
 -- set up on the NEW run's G.GAME, not the dying old one). Fires on EVERY run
 -- transition (first run and every restart), not just match-start.
 function SPDRN._check_pending_run_info()
+	if not (G.GAME and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil) then return end
+	SPDRN._write_pending_run_info()
+end
+
+-- Writes the deferred run_info, if one is waiting. The caller has checked that the new run's
+-- Blind Select is up (the stake is that of the new run).
+function SPDRN._write_pending_run_info()
 	local pending = SPDRN._rlog_pending_run_info
 	if not pending then return end
-	if not (G.GAME and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil) then return end
 	SPDRN._rlog_pending_run_info = nil
 	MPAPI.RLOGCodes.run_info:write(pending.seed, pending.deck, G.GAME.stake)
 end

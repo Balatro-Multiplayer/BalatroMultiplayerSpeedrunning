@@ -7,9 +7,10 @@ SPDRN = { id = 'MultiplayerSPDRN' }
 function SPDRN.is_active()
 	return true
 end
-function SPDRN._check_pending_run_info()
+function SPDRN._write_pending_run_info()
 	calls[#calls + 1] = 'run_info'
 end
+G = { GAME = {}, STATE = 1, STATES = { BLIND_SELECT = 1 } }
 MPAPI = {
 	get_current_lobby = function() end,
 	run_save = {
