@@ -35,7 +35,7 @@ local function get_leaderboard()
 			{ header = 'L', header_colour = G.C.RED, colour = G.C.RED, width = 0.5, value = function(e) return tostring(e.losses or 0) end },
 		},
 		empty_text = 'No ranked players yet.',
-		web_url = 'https://new.balatromp.com/leaderboards',
+		web_url = 'https://balatromp.com/leaderboards',
 		-- Leaderboards are the rated queue, so they carry the server's ranked prefix.
 		fetch = function(tab_key, cb)
 			MPAPI.matchmaking.get_leaderboard(SPDRN.id, SPDRN.LobbyKind.RANKED_PREFIX .. tab_key, nil, {}, cb)
