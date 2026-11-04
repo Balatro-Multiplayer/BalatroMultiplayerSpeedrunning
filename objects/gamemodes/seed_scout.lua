@@ -145,7 +145,7 @@ MPAPI.GameMode({
 			self._scout_started_at = self._scout_started_at or love.timer.getTime()
 			-- A rejoin that starts from a Run save brings the run's own money back with it: the
 			-- scouting budget would overwrite that at the first Blind Select.
-			if not (MPAPI.run_save and MPAPI.run_save._staged) then
+			if not (MPAPI.run_save and MPAPI.run_save.is_staged and MPAPI.run_save.is_staged()) then
 				SPDRN._pending_dollars_override = 500
 			end
 		end
