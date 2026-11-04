@@ -10,7 +10,7 @@ function SPDRN._write_pending_run_info()
 	calls[#calls + 1] = 'run_info'
 end
 G = { GAME = {}, STATE = 1, STATES = { BLIND_SELECT = 1 } }
-function SPDRN._check_pending_dollars_override()
+function SPDRN._apply_pending_dollars_override()
 	calls[#calls + 1] = 'budget'
 end
 MPAPI = {

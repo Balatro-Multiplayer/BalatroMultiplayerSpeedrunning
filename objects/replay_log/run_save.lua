@@ -96,7 +96,7 @@ if MPAPI.run_save.take and not MPAPI.run_save._spdrn_take_wrapped then
 	MPAPI.run_save.take = function(...)
 		if SPDRN.is_active() and G.GAME and G.STATE == G.STATES.BLIND_SELECT then
 			pcall(SPDRN._write_pending_run_info)
-			pcall(SPDRN._check_pending_dollars_override)
+			pcall(SPDRN._apply_pending_dollars_override)
 		end
 		return take(...)
 	end

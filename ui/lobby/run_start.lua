@@ -142,11 +142,20 @@ end
 SPDRN._pending_dollars_override = nil
 
 function SPDRN._check_pending_dollars_override()
-	local amount = SPDRN._pending_dollars_override
-	if not amount then
+	if not SPDRN._pending_dollars_override then
 		return
 	end
 	if not (G.GAME and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil) then
+		return
+	end
+	SPDRN._apply_pending_dollars_override()
+end
+
+-- Sets the waiting override on the live run. The caller has checked that the new run's Blind
+-- Select is up.
+function SPDRN._apply_pending_dollars_override()
+	local amount = SPDRN._pending_dollars_override
+	if not amount then
 		return
 	end
 	SPDRN._pending_dollars_override = nil
