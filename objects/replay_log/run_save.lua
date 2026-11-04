@@ -95,8 +95,10 @@ if MPAPI.run_save.take and not MPAPI.run_save._spdrn_take_wrapped then
 	local take = MPAPI.run_save.take
 	MPAPI.run_save.take = function(...)
 		if SPDRN.is_active() and G.GAME and G.STATE == G.STATES.BLIND_SELECT then
-			pcall(SPDRN._write_pending_run_info)
-			pcall(SPDRN._apply_pending_dollars_override)
+			for _, step in ipairs({ SPDRN._write_pending_run_info, SPDRN._apply_pending_dollars_override }) do
+				local ok, err = pcall(step)
+				if not ok then MPAPI.sendWarnMessage('[run_save] a step before the Run save failed: ' .. tostring(err)) end
+			end
 		end
 		return take(...)
 	end
