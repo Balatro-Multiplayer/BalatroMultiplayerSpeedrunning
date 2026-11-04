@@ -24,6 +24,15 @@ local STATE_KEYS = {
 	'scout_restart_pending',
 }
 
+-- The match-wide stats the end screen and the ranked metric read (objects/matchmaking/progress.lua).
+-- A run before the one in progress is finished by the time a Run save is taken, so these hold
+-- its time and best hand. The log cannot give them back: the catch-up plays it at its own speed.
+local PROGRESS_KEYS = {
+	'best_run_time_ms',
+	'times_skipped',
+	'best_hand_amt',
+}
+
 local function copy(value)
 	if type(value) ~= 'table' then
 		return value
@@ -53,6 +62,10 @@ MPAPI.run_save.register_state(SPDRN.id, {
 		for _, key in ipairs(STATE_KEYS) do
 			state[key] = copy(instance['_' .. key])
 		end
+		state.progress = {}
+		for _, key in ipairs(PROGRESS_KEYS) do
+			state.progress[key] = SPDRN._progress and SPDRN._progress[key]
+		end
 		return state
 	end,
 	-- The catch-up's instance is a new one that has seen none of the run: every key is set from
@@ -64,6 +77,11 @@ MPAPI.run_save.register_state(SPDRN.id, {
 		end
 		for _, key in ipairs(STATE_KEYS) do
 			instance['_' .. key] = copy(state[key])
+		end
+		if SPDRN._progress and type(state.progress) == 'table' then
+			for _, key in ipairs(PROGRESS_KEYS) do
+				SPDRN._progress[key] = state.progress[key]
+			end
 		end
 	end,
 })
