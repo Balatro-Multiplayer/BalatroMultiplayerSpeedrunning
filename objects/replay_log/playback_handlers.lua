@@ -209,7 +209,7 @@ local function wait_for_hand_dealt(driver, retry, callback)
 				-- failure mode (see highlight_resolved_hand_indices's own warn-and-
 				-- skip) -- a stuck driver is strictly worse than a few more skipped
 				-- cards.
-				MPAPI.sendWarnMessage('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				MPAPI.playback.wait_gave_up('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
 				return true
 			end
 			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
@@ -260,7 +260,7 @@ local function wait_for_skip_applied(driver, retry, callback, blind_before)
 		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
 			attempts = attempts + 1
 			if attempts > SELECT_BLIND_RETRY_LIMIT then
-				MPAPI.sendWarnMessage('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				MPAPI.playback.wait_gave_up('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
 				return true
 			end
 			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
@@ -289,7 +289,7 @@ local function wait_for_blind_select_screen(driver, on_ready)
 			return true
 		end
 		if love.timer.getTime() >= deadline then
-			MPAPI.sendWarnMessage('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
+			MPAPI.playback.wait_gave_up('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
 			return true
 		end
 		return false
@@ -653,7 +653,7 @@ function SPDRN._await_cashout_transition(driver)
 	SPDRN._playback_wait_for(function()
 		if G.STATE == G.STATES.ROUND_EVAL then
 			if love.timer.getTime() >= deadline then
-				MPAPI.sendWarnMessage('[replay] cashout: still in ROUND_EVAL after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
+				MPAPI.playback.wait_gave_up('[replay] cashout: still in ROUND_EVAL after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
 				return true
 			end
 			return false
@@ -661,7 +661,7 @@ function SPDRN._await_cashout_transition(driver)
 		if G.STATE == G.STATES.SHOP then
 			if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then return true end
 			if love.timer.getTime() >= deadline then
-				MPAPI.sendWarnMessage('[replay] cashout: shop never became ready after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
+				MPAPI.playback.wait_gave_up('[replay] cashout: shop never became ready after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
 				return true
 			end
 			return false

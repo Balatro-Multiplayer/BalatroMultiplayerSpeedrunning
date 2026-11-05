@@ -143,7 +143,11 @@ MPAPI.GameMode({
 			-- more scouting time). SPDRN._check_seed_scout_timer (polled from core.lua) is what
 			-- actually advances the phase once this elapses.
 			self._scout_started_at = self._scout_started_at or love.timer.getTime()
-			SPDRN._pending_dollars_override = 500
+			-- A rejoin that starts from a Run save brings the run's own money back with it: the
+			-- scouting budget would overwrite that at the first Blind Select.
+			if not (MPAPI.run_save and MPAPI.run_save.is_staged and MPAPI.run_save.is_staged()) then
+				SPDRN._pending_dollars_override = 500
+			end
 		end
 		-- 'race'-phase calls (the scout->race transition) intentionally do NOT set a dollars
 		-- override -- regular starting money, per the mechanic's own design.
