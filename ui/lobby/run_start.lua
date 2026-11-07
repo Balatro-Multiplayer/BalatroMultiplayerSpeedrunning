@@ -145,7 +145,7 @@ function SPDRN._check_pending_dollars_override()
 	if not SPDRN._pending_dollars_override then
 		return
 	end
-	if not (G.GAME and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil) then
+	if not (G.GAME and SPDRN.blind_select_is_up()) then
 		return
 	end
 	SPDRN._apply_pending_dollars_override()

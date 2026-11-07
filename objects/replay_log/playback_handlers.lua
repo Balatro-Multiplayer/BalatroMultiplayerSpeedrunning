@@ -200,7 +200,7 @@ local function wait_for_hand_dealt(driver, retry, callback)
 		-- before G.hand is populated -- retrying blindly during that gap calls
 		-- G.FUNCS.select_blind/skip_blind with a now-nil G.blind_select and
 		-- crashes vanilla (see comment above).
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if SPDRN.blind_select_is_up() then
 			attempts = attempts + 1
 			if attempts > SELECT_BLIND_RETRY_LIMIT then
 				-- Give up for real: resolve the wait anyway rather than hanging the
@@ -209,7 +209,7 @@ local function wait_for_hand_dealt(driver, retry, callback)
 				-- failure mode (see highlight_resolved_hand_indices's own warn-and-
 				-- skip) -- a stuck driver is strictly worse than a few more skipped
 				-- cards.
-				MPAPI.playback.wait_gave_up('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				MPAPI.playback.record_gave_up_wait('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
 				return true
 			end
 			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
@@ -249,7 +249,7 @@ local function wait_for_skip_applied(driver, retry, callback, blind_before)
 	local attempts = 0
 	local next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
 	SPDRN._playback_wait_for(function()
-		if G.GAME.blind_on_deck ~= blind_before and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if G.GAME.blind_on_deck ~= blind_before and SPDRN.blind_select_is_up() then
 			return true
 		end
 		if love.timer.getTime() < next_retry_at then
@@ -257,10 +257,10 @@ local function wait_for_skip_applied(driver, retry, callback, blind_before)
 		end
 		-- Same crash-avoidance guard as wait_for_hand_dealt's own retry gate:
 		-- only re-click while genuinely still on the blind-select screen.
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if SPDRN.blind_select_is_up() then
 			attempts = attempts + 1
 			if attempts > SELECT_BLIND_RETRY_LIMIT then
-				MPAPI.playback.wait_gave_up('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				MPAPI.playback.record_gave_up_wait('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
 				return true
 			end
 			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
@@ -285,16 +285,16 @@ local function wait_for_blind_select_screen(driver, on_ready)
 	MPAPI.playback.leave_shop_if_needed()
 	local deadline = love.timer.getTime() + BLIND_SELECT_SCREEN_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0 then
+		if SPDRN.blind_select_is_up() and G.blind_select.alignment.offset.x == 0 then
 			return true
 		end
 		if love.timer.getTime() >= deadline then
-			MPAPI.playback.wait_gave_up('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
+			MPAPI.playback.record_gave_up_wait('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
 			return true
 		end
 		return false
 	end, function()
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if SPDRN.blind_select_is_up() then
 			on_ready()
 		elseif driver then
 			driver:play()
@@ -585,93 +585,8 @@ MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.REORDER, function(args, ct
 	end
 end)
 
--- Same driver-pacing hazard as select_blind/skip_blind above: cash_out's real
--- effect is normally the ROUND_EVAL -> SHOP transition, which builds
--- G.shop_jokers/etc asynchronously (not synchronously within this call) --
--- without waiting for it, the driver's next dispatched opcode (buy/reroll/
--- sell/pack_pick/pack_skip targeting the still-nil shop areas) can run before
--- the shop actually exists. Confirmed live: a replayed reroll crashed with
--- "attempt to get length of field 'cards' (a nil value)"
--- (functions/button_callbacks.lua:2925) from exactly this gap.
---
--- Accepts either "reached the fully-built shop" (the normal case -- still
--- gated on G.shop_jokers.cards specifically, not just G.shop_jokers existing:
--- confirmed live that G.shop_jokers itself can be non-nil (the CardArea
--- object constructed) while .cards is still nil (not yet populated), and a
--- reroll dispatched into that gap crashes vanilla's reroll_shop with "attempt
--- to get length of field 'cards' (a nil value)" -- functions/button_callbacks.lua,
--- inside reroll_shop's own deferred G.E_MANAGER event, per the lovely
--- game-dump) OR "left ROUND_EVAL for some state that isn't SHOP at all": a
--- match-winning cash-out (e.g. clearing the final ante) skips the shop
--- entirely and goes straight to a win/end-of-run sequence instead -- confirmed
--- live that a SHOP-only predicate here hangs forever on exactly that cash-out,
--- since G.STATE never becomes SHOP for it.
--- Bounded the same way as the other waits in this file: cash_out is the most
--- reliable of the bunch in practice, but nothing here guarantees the replay
--- hasn't already drifted past this round entirely -- give up after a
--- real-time timeout rather than risk hanging forever on an edge case not yet
--- seen live.
-local CASHOUT_TRANSITION_TIMEOUT_SECONDS = 10
-
--- The Cash Out button is its own UIBox, built some time after the round_eval screen. Calling
--- cash_out before it exists removes G.round_eval first, and the button is then built with no
--- major to follow: it leaks off screen.
-local function find_cash_out_button()
-	for _, box in pairs(G.I.UIBOX) do
-		local found
-		local function walk(node)
-			if found or not node then return end
-			if node.config and node.config.button == 'cash_out' then found = node return end
-			for _, child in ipairs(node.children or {}) do walk(child) end
-		end
-		walk(box.UIRoot)
-		if found then return found end
-	end
-end
-
--- True when the Cash Out wait can end: the button exists, the round was already cashed out
--- (no round_eval and the state is past ROUND_EVAL), or time ran out. The same "no
--- round_eval" holds before the round is evaluated, so those states keep waiting.
-function SPDRN._cashout_wait_over(button_exists, round_eval_built, state, timed_out)
-	if button_exists or timed_out then return true end
-	local S = G.STATES
-	local before_round_eval = state == S.SELECTING_HAND or state == S.HAND_PLAYED or state == S.DRAW_TO_HAND or state == S.NEW_ROUND
-	return not round_eval_built and state ~= S.ROUND_EVAL and not before_round_eval
-end
-
+-- The bounded wait for the Cash Out button and for the shop that follows is MPAPI's.
 MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.CASHOUT, function(_args, ctx)
 	if not ctx.is_pov then return end
-	local driver = ctx.driver
-	if driver then driver:pause() end
-	local button_deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
-	SPDRN._playback_wait_for(function()
-		return SPDRN._cashout_wait_over(find_cash_out_button() ~= nil, G.round_eval ~= nil, G.STATE, love.timer.getTime() >= button_deadline)
-	end, function()
-		G.FUNCS.cash_out(find_cash_out_button() or { config = {} })
-		SPDRN._await_cashout_transition(driver)
-	end)
+	MPAPI.playback.cash_out_when_ready(ctx, SPDRN._playback_wait_for)
 end)
-
-function SPDRN._await_cashout_transition(driver)
-	local deadline = love.timer.getTime() + CASHOUT_TRANSITION_TIMEOUT_SECONDS
-	SPDRN._playback_wait_for(function()
-		if G.STATE == G.STATES.ROUND_EVAL then
-			if love.timer.getTime() >= deadline then
-				MPAPI.playback.wait_gave_up('[replay] cashout: still in ROUND_EVAL after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
-				return true
-			end
-			return false
-		end
-		if G.STATE == G.STATES.SHOP then
-			if G.shop_jokers ~= nil and G.shop_jokers.cards ~= nil then return true end
-			if love.timer.getTime() >= deadline then
-				MPAPI.playback.wait_gave_up('[replay] cashout: shop never became ready after ' .. CASHOUT_TRANSITION_TIMEOUT_SECONDS .. 's -- giving up and resuming anyway')
-				return true
-			end
-			return false
-		end
-		return true
-	end, function()
-		if driver then driver:play() end
-	end)
-end

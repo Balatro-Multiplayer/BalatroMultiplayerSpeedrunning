@@ -283,7 +283,7 @@ local function replay_race_start(_args, ctx)
 	SPDRN.teardown_existing_run()
 	begin_race(instance)
 	SPDRN._playback_wait_for(function()
-		return SPDRN._pending_run_transition == nil and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil
+		return SPDRN._pending_run_transition == nil and SPDRN.blind_select_is_up()
 	end, function()
 		driver:play()
 	end)
