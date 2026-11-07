@@ -5,7 +5,7 @@
 -- SPDRN.begin_run and objects/matchmaking/result.lua/objects/actions/forfeit.lua's
 -- retimed end_run calls) rather than once per individual Balatro run.
 --
--- run_complete's replay is a no-op: for genuinely multi-run formats (Stake
+-- run_complete's replay does not restart anything: for genuinely multi-run formats (Stake
 -- Climb, White Stake Triple), the transition to the NEXT run already happens
 -- automatically and correctly during replay -- SPDRN.request_run_transition
 -- is called from inside a real gamemode's own `calculate()` context handler
@@ -14,7 +14,8 @@
 -- as it would live. Explicitly restarting here too would race/duplicate that
 -- already-in-flight transition. For single-run/terminal formats
 -- (Gold Stake Single, etc), record_run_completed fires once with nothing
--- further to transition to at all -- either way, nothing for replay to do.
+-- further to transition to at all -- either way, nothing to restart. It only takes the run's
+-- time from the log's timestamps (run_time.lua).
 --
 -- run_died/run_restarted DO need explicit handling: unlike run_complete,
 -- both correspond to a UI button click with no natural replay-time trigger
@@ -31,19 +32,17 @@
 -- There is no recorded signal distinguishing "about to restart" from "about
 -- to forfeit" at the moment run_died dispatches. Not solved this pass, same
 -- spirit as playback_launch.lua's own documented "Known v1 gap" comment.
-local function noop_replay(self, _args, ctx)
-	if ctx.schema_version >= 1 then
-		-- no-op; see file header
-	end
-end
-
 MPAPI.RLOG_CODE {
 	key = MPAPI.OPCODE.RUN_COMPLETE,
 	mods = { 'spdrn' },
 	write = function(self)
 		self:record(nil, "action:runComplete")
 	end,
-	replay = noop_replay,
+	replay = function(_self, _args, ctx)
+		if ctx.is_pov and ctx.driver then
+			SPDRN.fold_logged_run_time(ctx.driver._timeline, ctx.driver._cursor - 1)
+		end
+	end,
 }
 
 MPAPI.RLOG_CODE {
