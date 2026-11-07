@@ -209,7 +209,7 @@ local function wait_for_hand_dealt(driver, retry, callback)
 				-- failure mode (see highlight_resolved_hand_indices's own warn-and-
 				-- skip) -- a stuck driver is strictly worse than a few more skipped
 				-- cards.
-				MPAPI.playback.wait_gave_up('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				MPAPI.playback.record_gave_up_wait('[replay] select_blind: hand never appeared after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
 				return true
 			end
 			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
@@ -260,7 +260,7 @@ local function wait_for_skip_applied(driver, retry, callback, blind_before)
 		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
 			attempts = attempts + 1
 			if attempts > SELECT_BLIND_RETRY_LIMIT then
-				MPAPI.playback.wait_gave_up('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
+				MPAPI.playback.record_gave_up_wait('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
 				return true
 			end
 			next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
@@ -289,7 +289,7 @@ local function wait_for_blind_select_screen(driver, on_ready)
 			return true
 		end
 		if love.timer.getTime() >= deadline then
-			MPAPI.playback.wait_gave_up('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
+			MPAPI.playback.record_gave_up_wait('[replay] blind-select screen never appeared after ' .. BLIND_SELECT_SCREEN_TIMEOUT_SECONDS .. 's -- replay has likely already moved past it, skipping this action')
 			return true
 		end
 		return false
