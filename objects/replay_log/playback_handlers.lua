@@ -344,35 +344,39 @@ end)
 -- literally empty selection.
 MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.PLAY, function(args, ctx)
 	if not ctx.is_pov then return end
-	local indices, refs = args and args[1], args and args[2]
-	if not indices then return end
-	highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.PLAY)
-	-- G.hand can be nil here too (highlight_resolved_hand_indices already
-	-- warned and no-opped in that case, above) -- checked via G.hand's own
-	-- presence rather than assuming it survived that call, not just #==0.
-	local highlighted = G.hand and G.hand.highlighted
-	if not highlighted or #highlighted == 0 then
-		if G.hand then
-			MPAPI.sendWarnMessage('[replay] play: no cards resolved out of ' .. #indices .. ' -- replay has desynced from the recording, skipping this play entirely')
+	MPAPI.playback.with_hand_ready(ctx, function()
+		local indices, refs = args and args[1], args and args[2]
+		if not indices then return end
+		highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.PLAY)
+		-- G.hand can be nil here too (highlight_resolved_hand_indices already
+		-- warned and no-opped in that case, above) -- checked via G.hand's own
+		-- presence rather than assuming it survived that call, not just #==0.
+		local highlighted = G.hand and G.hand.highlighted
+		if not highlighted or #highlighted == 0 then
+			if G.hand then
+				MPAPI.sendWarnMessage('[replay] play: no cards resolved out of ' .. #indices .. ' -- replay has desynced from the recording, skipping this play entirely')
+			end
+			return
 		end
-		return
-	end
-	G.FUNCS.play_cards_from_highlighted()
+		G.FUNCS.play_cards_from_highlighted()
+	end, SPDRN._playback_wait_for)
 end)
 
 MPAPI.playback.register_handler('spdrn', MPAPI.OPCODE.DISCARD, function(args, ctx)
 	if not ctx.is_pov then return end
-	local indices, refs = args and args[1], args and args[2]
-	if not indices then return end
-	highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.DISCARD)
-	local highlighted = G.hand and G.hand.highlighted
-	if not highlighted or #highlighted == 0 then
-		if G.hand then
-			MPAPI.sendWarnMessage('[replay] discard: no cards resolved out of ' .. #indices .. ' -- replay has desynced from the recording, skipping this discard entirely')
+	MPAPI.playback.with_hand_ready(ctx, function()
+		local indices, refs = args and args[1], args and args[2]
+		if not indices then return end
+		highlight_resolved_hand_indices(indices, refs, ctx, MPAPI.OPCODE.DISCARD)
+		local highlighted = G.hand and G.hand.highlighted
+		if not highlighted or #highlighted == 0 then
+			if G.hand then
+				MPAPI.sendWarnMessage('[replay] discard: no cards resolved out of ' .. #indices .. ' -- replay has desynced from the recording, skipping this discard entirely')
+			end
+			return
 		end
-		return
-	end
-	G.FUNCS.discard_cards_from_highlighted(nil, false)
+		G.FUNCS.discard_cards_from_highlighted(nil, false)
+	end, SPDRN._playback_wait_for)
 end)
 
 -- Registers a card's OWN identity ref (not a hand-target ref) into the shared
