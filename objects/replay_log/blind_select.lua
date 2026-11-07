@@ -2,5 +2,5 @@
 -- ends and returns to it only once the next run's setup has finished, so this also says "the new
 -- run is ready".
 function SPDRN.blind_select_is_up()
-	return SPDRN.blind_select_is_up()
+	return G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil
 end
