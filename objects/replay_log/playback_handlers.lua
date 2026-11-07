@@ -200,7 +200,7 @@ local function wait_for_hand_dealt(driver, retry, callback)
 		-- before G.hand is populated -- retrying blindly during that gap calls
 		-- G.FUNCS.select_blind/skip_blind with a now-nil G.blind_select and
 		-- crashes vanilla (see comment above).
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if SPDRN.blind_select_is_up() then
 			attempts = attempts + 1
 			if attempts > SELECT_BLIND_RETRY_LIMIT then
 				-- Give up for real: resolve the wait anyway rather than hanging the
@@ -249,7 +249,7 @@ local function wait_for_skip_applied(driver, retry, callback, blind_before)
 	local attempts = 0
 	local next_retry_at = love.timer.getTime() + SELECT_BLIND_RETRY_COOLDOWN_SECONDS
 	SPDRN._playback_wait_for(function()
-		if G.GAME.blind_on_deck ~= blind_before and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if G.GAME.blind_on_deck ~= blind_before and SPDRN.blind_select_is_up() then
 			return true
 		end
 		if love.timer.getTime() < next_retry_at then
@@ -257,7 +257,7 @@ local function wait_for_skip_applied(driver, retry, callback, blind_before)
 		end
 		-- Same crash-avoidance guard as wait_for_hand_dealt's own retry gate:
 		-- only re-click while genuinely still on the blind-select screen.
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if SPDRN.blind_select_is_up() then
 			attempts = attempts + 1
 			if attempts > SELECT_BLIND_RETRY_LIMIT then
 				MPAPI.playback.record_gave_up_wait('[replay] skip_blind: blind_on_deck never advanced after ' .. SELECT_BLIND_RETRY_LIMIT .. ' retries -- giving up and resuming anyway')
@@ -285,7 +285,7 @@ local function wait_for_blind_select_screen(driver, on_ready)
 	MPAPI.playback.leave_shop_if_needed()
 	local deadline = love.timer.getTime() + BLIND_SELECT_SCREEN_TIMEOUT_SECONDS
 	SPDRN._playback_wait_for(function()
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil and G.blind_select.alignment.offset.x == 0 then
+		if SPDRN.blind_select_is_up() and G.blind_select.alignment.offset.x == 0 then
 			return true
 		end
 		if love.timer.getTime() >= deadline then
@@ -294,7 +294,7 @@ local function wait_for_blind_select_screen(driver, on_ready)
 		end
 		return false
 	end, function()
-		if G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil then
+		if SPDRN.blind_select_is_up() then
 			on_ready()
 		elseif driver then
 			driver:play()

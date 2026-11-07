@@ -55,7 +55,7 @@ end
 -- set up on the NEW run's G.GAME, not the dying old one). Fires on EVERY run
 -- transition (first run and every restart), not just match-start.
 function SPDRN._check_pending_run_info()
-	if not (G.GAME and G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil) then return end
+	if not (G.GAME and SPDRN.blind_select_is_up()) then return end
 	SPDRN._write_pending_run_info()
 end
 

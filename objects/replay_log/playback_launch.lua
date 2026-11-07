@@ -101,7 +101,7 @@ function SPDRN._playback_handle_run_transition(_kind, ctx)
 	G.FUNCS.exit_overlay_menu()
 	SPDRN.restart_current_run()
 	SPDRN._playback_wait_for(function()
-		return G.STATE == G.STATES.BLIND_SELECT and G.blind_select ~= nil
+		return SPDRN.blind_select_is_up()
 	end, function()
 		-- The exit_overlay_menu() call above may have just dismissed OUR OWN active seek/sync
 		-- overlay instead of a stale lose-screen (same single G.OVERLAY_MENU slot either way) --
