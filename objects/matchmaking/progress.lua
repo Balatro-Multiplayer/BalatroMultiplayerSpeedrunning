@@ -154,6 +154,19 @@ function SPDRN.reset_current_run_timer()
 	SPDRN._current_run_started_at = love.timer.getTime()
 end
 
+-- Keeps the fastest individual run. Whole milliseconds: the metric becomes the ranked seasonBest,
+-- which the server's Postgres mirror stores as a bigint (a fractional one failed the whole run's
+-- mirror write).
+function SPDRN.fold_run_time(run_time_ms)
+	local p = SPDRN._progress
+	if not p or p.finalized then
+		return
+	end
+	if not p.best_run_time_ms or run_time_ms < p.best_run_time_ms then
+		p.best_run_time_ms = run_time_ms
+	end
+end
+
 -- Called once a single run completes (reaches the win ante) within the match --
 -- multi-run formats call this once per run, not just at the last one, so the
 -- reported metric is the fastest INDIVIDUAL run, not the whole match's elapsed
@@ -163,13 +176,11 @@ function SPDRN.record_run_completed()
 	if not p or p.finalized then
 		return
 	end
-	local started_at = SPDRN._current_run_started_at or love.timer.getTime()
-	-- Whole milliseconds: the metric becomes the ranked seasonBest, which the
-	-- server's Postgres mirror stores as a bigint (a fractional one failed
-	-- the whole run's mirror write).
-	local run_time_ms = math.floor((love.timer.getTime() - started_at) * 1000 + 0.5)
-	if not p.best_run_time_ms or run_time_ms < p.best_run_time_ms then
-		p.best_run_time_ms = run_time_ms
+	-- A replay plays at its own pace, so its clock says nothing about the real run. The run_complete
+	-- handler (objects/replay_log/run_time.lua) takes the time from the log's timestamps instead.
+	if not SPDRN.is_replay_driving() then
+		local started_at = SPDRN._current_run_started_at or love.timer.getTime()
+		SPDRN.fold_run_time(math.floor((love.timer.getTime() - started_at) * 1000 + 0.5))
 	end
 	-- Marks this individual run's completion within the match's single RLOG
 	-- block (end_run is now once-per-match -- see objects/replay_log/
